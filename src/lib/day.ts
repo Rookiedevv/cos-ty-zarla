@@ -45,18 +45,21 @@ export function todayFor(profile: Profile, now = new Date()) {
   return localDate(now, profile.timezone);
 }
 
-/** Loads everything the Today screen needs and stores the day's target snapshot. */
+/**
+ * Loads everything the Today screen needs and stores the day's target snapshot.
+ * Every query filters by user explicitly, so this is also safe with the server-side admin client.
+ */
 export async function loadDay(supabase: SupabaseClient, profile: Profile, date: string, now = new Date()): Promise<DayState> {
   const historyStart = addDays(date, -(ENGINE.CARRY_MAX_DAYS * 2));
 
   const [weightRes, checkinRes, mealsRes, waterRes, targetsRes, intakeRes] = await Promise.all([
-    supabase.from("weights").select("kg, date").lte("date", date).order("date", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("checkins").select("date, sleep_hours, planned_activity").eq("date", date).maybeSingle(),
+    supabase.from("weights").select("kg, date").eq("user_id", profile.id).lte("date", date).order("date", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("checkins").select("date, sleep_hours, planned_activity").eq("user_id", profile.id).eq("date", date).maybeSingle(),
     supabase.from("meals").select("id, eaten_at, eaten_date, description, total_kcal, protein_g, outside_window")
-      .eq("eaten_date", date).order("eaten_at", { ascending: true }),
-    supabase.from("water_logs").select("ml").eq("date", date),
-    supabase.from("daily_targets").select("date, pre_carry_target, final_target").gte("date", historyStart).lt("date", date),
-    supabase.from("daily_intake").select("date, kcal").gte("date", historyStart).lt("date", date),
+      .eq("user_id", profile.id).eq("eaten_date", date).order("eaten_at", { ascending: true }),
+    supabase.from("water_logs").select("ml").eq("user_id", profile.id).eq("date", date),
+    supabase.from("daily_targets").select("date, pre_carry_target, final_target").eq("user_id", profile.id).gte("date", historyStart).lt("date", date),
+    supabase.from("daily_intake").select("date, kcal").eq("user_id", profile.id).gte("date", historyStart).lt("date", date),
   ]);
 
   const lastWeight = weightRes.data ? { kg: Number(weightRes.data.kg), date: weightRes.data.date as string } : null;

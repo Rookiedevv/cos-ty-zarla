@@ -82,3 +82,32 @@ Save.
 - **Google says "Access blocked" / "app not verified"**: the address isn't a *Test user* in step 3.2.
 - **You land back on the login page after Google**: the redirect URL in step 5 is missing or doesn't match **E** exactly.
 - Anything else: send Claude a screenshot.
+
+---
+
+# Reminders (push notifications)
+
+About 10 minutes, once. Claude gives you a one-off scheduler password to use in steps 3 and 4.
+
+## 1. Add the new tables
+Supabase → **SQL Editor → New query**. Paste the contents of `supabase/migrations/20261012000002_notifications.sql` and click **Run**.
+
+## 2. Give the app its server key
+1. Supabase → **Project Settings → API Keys**. Under **Secret keys**, copy the key that starts with `sb_secret_` (click the eye or copy icon).
+2. Vercel → your project → **Settings → Environment Variables → Add**:
+   - Key: `SUPABASE_SECRET_KEY`, Value: the `sb_secret_…` key.
+
+   This key is powerful: paste it only into Vercel, never into a chat or the code.
+
+## 3. Add the scheduler password to Vercel
+Same place, add one more:
+- Key: `CRON_SECRET`, Value: the password Claude gave you.
+
+Then redeploy so the app picks up both: **Deployments** → ⋯ on the top one → **Redeploy**.
+
+## 4. Start the 5-minute clock
+Supabase → **SQL Editor → New query**. Paste `supabase/schedule_notifications.sql`, replace `YOUR_CRON_SECRET` with the same password, click **Run**.
+To pause it later: **Integrations → Cron → Jobs** → `send-reminders`.
+
+## 5. Turn reminders on, on each phone
+Open the app from its home-screen icon → **Settings → Reminders → Turn on reminders on this phone** → **Allow**. Tap **Send a test reminder** to check.

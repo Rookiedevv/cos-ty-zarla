@@ -1,5 +1,6 @@
 import { signOut } from "@/app/actions";
 import { AllowList } from "@/components/allow-list";
+import { NotificationSettings } from "@/components/notification-settings";
 import { PlanForm } from "@/components/plan-form";
 import { Button, Panel } from "@/components/ui";
 import { WeightQuick } from "@/components/weight-quick";
@@ -24,6 +25,7 @@ export default async function SettingsPage() {
       <Panel>
         <WeightQuick last={last} />
       </Panel>
+      <NotificationSettings prefs={profile.notification_prefs ?? {}} />
       <PlanForm mode="settings" profile={profile} weightKg={last?.kg ?? null} />
       {profile.is_admin && <AllowList emails={emails} self={profile.email} />}
       <form action={signOut}>

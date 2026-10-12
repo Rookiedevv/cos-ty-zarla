@@ -237,3 +237,87 @@ export async function removeAllowedEmail(email: string): Promise<ActionResult> {
   revalidatePath("/settings");
   return { ok: true };
 }
+
+// ───────────────────────── Notifications ─────────────────────────
+
+export async function getPushPublicKey(): Promise<string | null> {
+  await requireUser();
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const { getVapidKeys } = await import("@/lib/notify/push");
+    return (await getVapidKeys(createAdminClient())).publicKey;
+  } catch (e) {
+    console.error("push key unavailable", e);
+    return null;
+  }
+}
+
+const subscriptionSchema = z.object({
+  endpoint: z.url().max(2000),
+  keys: z.object({ p256dh: z.string().min(1).max(500), auth: z.string().min(1).max(500) }),
+});
+
+export async function savePushSubscription(sub: unknown, userAgent: string): Promise<ActionResult> {
+  const { supabase, profile } = await requireUser();
+  const parsed = subscriptionSchema.safeParse(sub);
+  if (!parsed.success) return fail("invalid");
+  // A device that was registered to someone else (shared phone) moves to whoever enabled it last.
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  await createAdminClient().from("push_subscriptions").delete().eq("endpoint", parsed.data.endpoint).neq("user_id", profile.id);
+  const { error } = await supabase.from("push_subscriptions").upsert(
+    {
+      user_id: profile.id,
+      endpoint: parsed.data.endpoint,
+      p256dh: parsed.data.keys.p256dh,
+      auth: parsed.data.keys.auth,
+      user_agent: userAgent.slice(0, 300),
+    },
+    { onConflict: "endpoint" },
+  );
+  if (error) return fail(error.message);
+  return { ok: true };
+}
+
+export async function removePushSubscription(endpoint: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
+  if (error) return fail(error.message);
+  return { ok: true };
+}
+
+const prefsSchema = z.object({
+  checkin: z.boolean(),
+  window: z.boolean(),
+  remaining: z.boolean(),
+  water: z.boolean(),
+  weighin: z.boolean(),
+});
+
+export async function saveNotificationPrefs(prefs: z.input<typeof prefsSchema>): Promise<ActionResult> {
+  const { supabase, profile } = await requireUser();
+  const parsed = prefsSchema.safeParse(prefs);
+  if (!parsed.success) return fail("invalid");
+  const { error } = await supabase.from("profiles").update({ notification_prefs: parsed.data }).eq("id", profile.id);
+  if (error) return fail(error.message);
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/** Sends a test reminder to every device the user enabled. */
+export async function sendTestNotification(): Promise<ActionResult & { devices?: number }> {
+  const { supabase, profile } = await requireUser();
+  const { data: subs } = await supabase.from("push_subscriptions").select("id, endpoint, p256dh, auth").eq("user_id", profile.id);
+  if (!subs?.length) return fail("no_devices");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { sendPush } = await import("@/lib/notify/push");
+  const { getDict } = await import("@/lib/i18n");
+  const admin = createAdminClient();
+  const t = getDict(profile.language).notify;
+  let ok = 0;
+  for (const s of subs) {
+    const r = await sendPush(admin, s, { title: t.testTitle, body: t.testBody, url: "/", tag: "test" });
+    if (r === "gone") await admin.from("push_subscriptions").delete().eq("id", s.id);
+    if (r === "ok") ok++;
+  }
+  return ok > 0 ? { ok: true, devices: ok } : fail("send_failed");
+}

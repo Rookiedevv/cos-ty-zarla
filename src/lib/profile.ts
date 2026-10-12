@@ -1,4 +1,5 @@
 import type { FoodFocus, Lifestyle, Method, Sex } from "./engine/types";
+import type { PrefKey } from "./notify/rules";
 
 export interface Profile {
   id: string;
@@ -21,6 +22,7 @@ export interface Profile {
   weigh_in_dow: number;
   weigh_in_time: string;
   water_override_ml: number | null;
+  notification_prefs: Partial<Record<PrefKey, boolean>> | null;
   onboarded_at: string | null;
 }
 
