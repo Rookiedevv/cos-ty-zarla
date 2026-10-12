@@ -1,26 +1,114 @@
 @import "tailwindcss";
+@import "@fontsource-variable/bricolage-grotesque/standard.css";
 
+/*
+  Look: a Polish milk bar (bar mleczny). Pale mint wall tiles, white enamel,
+  bottle-green menu-board ink, kompot red for "over", mustard for fasting.
+  Meals read like a price list on the wall: name, dotted leader, kcal.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --tile: #dcebe3;
+  --enamel: #fbfdfb;
+  --ink: #1f3b33;
+  --ink-soft: #4f6b62;
+  --grout: #b9d1c6;
+  --kompot: #b8302a;
+  --mustard: #b97f0f;
+  --mustard-bg: #f6e7c4;
+  --water: #2f6fa8;
+  --water-bg: #d4e5f3;
+  --focus: #2f6fa8;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --tile: #12241e;
+    --enamel: #1a3029;
+    --ink: #e4f0ea;
+    --ink-soft: #9db8ae;
+    --grout: #2c4a40;
+    --kompot: #ef6a5f;
+    --mustard: #e6ae3a;
+    --mustard-bg: #3a3218;
+    --water: #7cb2e2;
+    --water-bg: #1d3448;
+    --focus: #7cb2e2;
   }
 }
 
+@theme inline {
+  --color-tile: var(--tile);
+  --color-enamel: var(--enamel);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-grout: var(--grout);
+  --color-kompot: var(--kompot);
+  --color-mustard: var(--mustard);
+  --color-mustard-bg: var(--mustard-bg);
+  --color-water: var(--water);
+  --color-water-bg: var(--water-bg);
+  --font-sans: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  background: var(--tile);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--tile);
+  /* Faint wall tiles. */
+  background-image:
+    linear-gradient(var(--grout) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grout) 1px, transparent 1px);
+  background-size: 44px 44px;
+  background-attachment: fixed;
+  font-family: var(--font-sans);
+  line-height: 1.45;
+}
+
+@media (prefers-color-scheme: dark) {
+  body { background-image: linear-gradient(color-mix(in srgb, var(--grout) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--grout) 45%, transparent) 1px, transparent 1px); }
+}
+
+/* Condensed board lettering for the big numbers and headings. */
+.board {
+  font-stretch: 75%;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Price-list row: name ........ value */
+.menu-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.menu-row > .leader {
+  flex: 1;
+  min-width: 1rem;
+  border-bottom: 2px dotted var(--grout);
+  transform: translateY(-0.3em);
+}
+.menu-row > .value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
