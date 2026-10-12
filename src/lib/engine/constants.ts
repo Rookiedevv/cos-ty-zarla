@@ -27,8 +27,23 @@ export const ENGINE = {
   /** Lifestyle multipliers applied to BMR (no exercise included). */
   LIFESTYLE_FACTOR: { sedentary: 1.2, on_feet: 1.35, physical: 1.5 },
 
-  /** Planned exercise, kcal per kg of body weight for the day. */
-  ACTIVITY_KCAL_PER_KG: { rest: 0, light: 2.5, moderate: 5, hard: 8 },
+  /** Energy used to digest food, as a fraction of resting burn (used with a watch). */
+  THERMIC_EFFECT: 0.1,
+  /** Watch data older than this (hours) is treated as missing, so a flat phone battery doesn't shrink the target. */
+  WATCH_STALE_HOURS: 6,
+
+  /**
+   * Workout intensity in METs (Compendium of Physical Activities), by effort.
+   * Calories = (MET − 1) × kg × hours: only the part above resting, which the base burn already covers.
+   */
+  WORKOUT_MET: {
+    walk: { easy: 3.0, sweaty: 4.3, exhausting: 5.0 },
+    run: { easy: 7.0, sweaty: 9.8, exhausting: 11.5 },
+    gym: { easy: 3.5, sweaty: 5.0, exhausting: 6.0 },
+    bike: { easy: 4.0, sweaty: 6.8, exhausting: 10.0 },
+    football: { easy: 5.0, sweaty: 7.0, exhausting: 10.0 },
+    swim: { easy: 5.0, sweaty: 7.0, exhausting: 9.8 },
+  },
 
   /** Short sleep threshold and how much the deficit shrinks that day. */
   SHORT_SLEEP_HOURS: 6,
@@ -44,18 +59,8 @@ export const ENGINE = {
   /** Water: ml per kg of body weight, plus ml per hour of exercise. */
   WATER_ML_PER_KG: 33,
   WATER_ML_PER_EXERCISE_HOUR: 500,
-  /** Rough exercise hours implied by each planned activity level. */
-  ACTIVITY_EXERCISE_HOURS: { rest: 0, light: 0.5, moderate: 1, hard: 1.5 },
-
-  /**
-   * Watch "active calories" include ordinary walking around, which the lifestyle
-   * factor already counts. Only activity above this daily amount adds to the target.
-   */
-  WATCH_BASELINE_ACTIVE_KCAL: { sedentary: 300, on_feet: 500, physical: 700 },
   /** Fallback when the watch sends steps but no active calories: kcal per step per kg of body weight. */
   KCAL_PER_STEP_PER_KG: 0.0005,
-  /** Until this local time the target uses the higher of plan and watch; after it, only what the watch measured. */
-  WATCH_SWITCH_TIME: "18:00",
 
   /** High-protein focus: grams of protein per kg. */
   PROTEIN_G_PER_KG: 1.6,

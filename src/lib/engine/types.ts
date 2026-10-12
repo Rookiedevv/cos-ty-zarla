@@ -1,6 +1,7 @@
 export type Sex = "male" | "female";
 export type Lifestyle = "sedentary" | "on_feet" | "physical";
-export type PlannedActivity = "rest" | "light" | "moderate" | "hard";
+export type WorkoutKind = "walk" | "run" | "gym" | "bike" | "football" | "swim" | "other";
+export type Effort = "easy" | "sweaty" | "exhausting";
 export type Method = "none" | "if" | "five_two" | "montignac";
 export type FoodFocus =
   | "balanced"
@@ -25,12 +26,17 @@ export interface BodyProfile {
 }
 
 export interface DayInput {
-  /** Hours slept last night, or null if unknown (no check-in yet). */
+  /** Hours slept last night, or null if unknown. */
   sleepHours: number | null;
-  /** Planned activity from the check-in, or null when no check-in yet. */
-  plannedActivity: PlannedActivity | null;
-  /** Actual active kcal from a watch, when available (Phase 5). Replaces planned when present. */
-  actualActiveKcal?: number | null;
+  /** Whether today's morning check-in is done. Without it the target is provisional. */
+  checkedIn: boolean;
+  /** Without a watch: calories of today's planned/logged workouts (above resting). */
+  workoutKcal: number;
+  /**
+   * With a watch that synced recently: all active calories measured today.
+   * When set, it replaces the lifestyle factor and workouts entirely.
+   */
+  watchActiveKcal?: number | null;
   /** True when this is a 5:2 low day. */
   isLowDay?: boolean;
 }
@@ -49,7 +55,9 @@ export interface TargetBreakdown {
   bmr: number;
   baseBurn: number;
   activityKcal: number;
-  activitySource: "planned" | "watch" | "assumed_rest";
+  /** "watch": resting burn + digestion + everything the watch measured. "lifestyle": resting burn × lifestyle + workouts. */
+  mode: "watch" | "lifestyle";
+  activitySource: "watch" | "workouts" | "none";
   totalBurn: number;
   deficit: number;
   /** The recommended (max healthy) weekly pace for this person today, as a fraction of body weight. */

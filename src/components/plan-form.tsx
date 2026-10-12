@@ -71,7 +71,7 @@ function bodyOf(s: State, pace: BodyProfile["pace"]): BodyProfile | null {
 function preview(s: State, pace: BodyProfile["pace"]) {
   const body = bodyOf(s, pace);
   if (!body) return null;
-  return computeTarget({ today: "2000-01-01", profile: body, day: { sleepHours: 8, plannedActivity: "rest" } });
+  return computeTarget({ today: "2000-01-01", profile: body, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0 } });
 }
 
 export function PlanForm(props: { mode: "onboarding" | "settings"; profile: Profile; weightKg: number | null }) {

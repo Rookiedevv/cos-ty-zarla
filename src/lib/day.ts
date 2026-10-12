@@ -1,9 +1,9 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, ageOn, localDate, localTime } from "./engine/dates";
-import { activityFromWatch, computeTarget, waterTargetMl, watchActiveKcal } from "./engine/target";
+import { computeTarget, waterTargetMl, watchActiveKcal, watchIsFresh } from "./engine/target";
 import { ENGINE } from "./engine/constants";
-import type { HistoryDay, PlannedActivity, TargetBreakdown } from "./engine/types";
+import type { Effort, HistoryDay, TargetBreakdown, WorkoutKind } from "./engine/types";
 import { hhmm, insideWindow, isoWeekday, type Profile } from "./profile";
 
 export interface Meal {
@@ -19,7 +19,16 @@ export interface Meal {
 export interface Checkin {
   date: string;
   sleep_hours: number | null;
-  planned_activity: PlannedActivity;
+  rest_day: boolean;
+}
+
+export interface Workout {
+  id: string;
+  kind: WorkoutKind;
+  minutes: number;
+  effort: Effort | null;
+  description: string | null;
+  kcal: number;
 }
 
 export interface DayState {
@@ -31,6 +40,9 @@ export interface DayState {
   weightKg: number | null;
   lastWeight: { kg: number; date: string } | null;
   checkin: Checkin | null;
+  workouts: Workout[];
+  /** A companion app is connected for this person (they use the watch instead of workouts). */
+  hasWatch: boolean;
   meals: Meal[];
   eaten: number;
   proteinG: number;
@@ -47,6 +59,8 @@ export interface DayState {
     exerciseMinutes: number | null;
     sleepMinutes: number | null;
     updatedAt: string;
+    /** Recent enough to drive today's target (SPEC §5.3). */
+    fresh: boolean;
   } | null;
 }
 
@@ -61,9 +75,9 @@ export function todayFor(profile: Profile, now = new Date()) {
 export async function loadDay(supabase: SupabaseClient, profile: Profile, date: string, now = new Date()): Promise<DayState> {
   const historyStart = addDays(date, -(ENGINE.CARRY_MAX_DAYS * 2));
 
-  const [weightRes, checkinRes, mealsRes, waterRes, targetsRes, intakeRes, healthRes] = await Promise.all([
+  const [weightRes, checkinRes, mealsRes, waterRes, targetsRes, intakeRes, healthRes, workoutsRes, devicesRes] = await Promise.all([
     supabase.from("weights").select("kg, date").eq("user_id", profile.id).lte("date", date).order("date", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("checkins").select("date, sleep_hours, planned_activity").eq("user_id", profile.id).eq("date", date).maybeSingle(),
+    supabase.from("checkins").select("date, sleep_hours, rest_day").eq("user_id", profile.id).eq("date", date).maybeSingle(),
     supabase.from("meals").select("id, eaten_at, eaten_date, description, total_kcal, protein_g, outside_window")
       .eq("user_id", profile.id).eq("eaten_date", date).order("eaten_at", { ascending: true }),
     supabase.from("water_logs").select("ml").eq("user_id", profile.id).eq("date", date),
@@ -71,6 +85,9 @@ export async function loadDay(supabase: SupabaseClient, profile: Profile, date: 
     supabase.from("daily_intake").select("date, kcal").eq("user_id", profile.id).gte("date", historyStart).lt("date", date),
     supabase.from("health_daily").select("steps, active_kcal, exercise_minutes, sleep_minutes, updated_at")
       .eq("user_id", profile.id).eq("date", date).maybeSingle(),
+    supabase.from("workouts").select("id, kind, minutes, effort, description, kcal")
+      .eq("user_id", profile.id).eq("date", date).order("created_at"),
+    supabase.from("device_tokens").select("id").eq("user_id", profile.id).limit(1),
   ]);
 
   const nowLocal = localTime(now, profile.timezone);
@@ -83,8 +100,12 @@ export async function loadDay(supabase: SupabaseClient, profile: Profile, date: 
         exerciseMinutes: h.exercise_minutes as number | null,
         sleepMinutes: h.sleep_minutes as number | null,
         updatedAt: h.updated_at as string,
+        // Past days: whatever the watch recorded. Today: only if synced in the last few hours.
+        fresh: !isToday || watchIsFresh(h.updated_at as string, now),
       }
     : null;
+  const workouts = (workoutsRes.data as Workout[] | null) ?? [];
+  const hasWatch = (devicesRes.data ?? []).length > 0;
 
   const lastWeight = weightRes.data ? { kg: Number(weightRes.data.kg), date: weightRes.data.date as string } : null;
   const checkin = (checkinRes.data as Checkin | null) ?? null;
@@ -99,17 +120,7 @@ export async function loadDay(supabase: SupabaseClient, profile: Profile, date: 
   let target: TargetBreakdown | null = null;
   const weightKg = lastWeight?.kg ?? null;
   if (weightKg && profile.sex && profile.date_of_birth && profile.height_cm && profile.lifestyle) {
-    const plannedKcal = checkin ? ENGINE.ACTIVITY_KCAL_PER_KG[checkin.planned_activity] * weightKg : 0;
-    const measured = watch ? watchActiveKcal(watch.activeKcal, watch.steps, weightKg) : null;
-    const actualActiveKcal =
-      measured != null
-        ? activityFromWatch({
-            plannedKcal,
-            watchActiveKcal: measured,
-            lifestyle: profile.lifestyle,
-            localTime: isToday ? nowLocal : "23:59",
-          })
-        : null;
+    const watchKcal = watch?.fresh ? watchActiveKcal(watch.activeKcal, watch.steps, weightKg) : null;
     const intakeByDate = new Map((intakeRes.data ?? []).map((r) => [r.date as string, r.kcal as number]));
     const history: HistoryDay[] = (targetsRes.data ?? []).map((t) => ({
       date: t.date as string,
@@ -131,8 +142,9 @@ export async function loadDay(supabase: SupabaseClient, profile: Profile, date: 
       },
       day: {
         sleepHours: checkin?.sleep_hours != null ? Number(checkin.sleep_hours) : null,
-        plannedActivity: checkin?.planned_activity ?? null,
-        actualActiveKcal,
+        checkedIn: checkin != null,
+        workoutKcal: workouts.reduce((sum, w) => sum + w.kcal, 0),
+        watchActiveKcal: watchKcal,
         isLowDay,
       },
       history,
@@ -147,8 +159,9 @@ export async function loadDay(supabase: SupabaseClient, profile: Profile, date: 
     });
   }
 
-  const plannedHours = checkin ? ENGINE.ACTIVITY_EXERCISE_HOURS[checkin.planned_activity] : 0;
-  const exerciseHours = Math.max(plannedHours, (watch?.exerciseMinutes ?? 0) / 60);
+  const exerciseHours = watch?.fresh
+    ? (watch.exerciseMinutes ?? 0) / 60
+    : workouts.reduce((sum, w) => sum + w.minutes, 0) / 60;
   const cfg = profile.method_config ?? {};
 
   return {
@@ -159,6 +172,8 @@ export async function loadDay(supabase: SupabaseClient, profile: Profile, date: 
     weightKg,
     lastWeight,
     checkin,
+    workouts,
+    hasWatch,
     meals,
     eaten,
     proteinG: Math.round(proteinG),

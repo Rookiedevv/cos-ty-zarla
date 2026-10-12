@@ -123,20 +123,114 @@ export async function saveProfile(input: ProfileInput, mode: "onboarding" | "set
 
 // ───────────────────────── Daily ─────────────────────────
 
+const workoutInput = z.object({
+  kind: z.enum(["walk", "run", "gym", "bike", "football", "swim", "other"]),
+  minutes: z.coerce.number().int().min(1).max(600),
+  effort: z.enum(["easy", "sweaty", "exhausting"]).nullable().optional(),
+  description: z.string().trim().max(300).nullable().optional(),
+  /** Only for "other": the AI estimate the person saw and accepted. */
+  kcal: z.coerce.number().int().min(0).max(5000).nullable().optional(),
+});
+export type WorkoutInput = z.input<typeof workoutInput>;
+
 const checkinSchema = z.object({
   sleep_hours: z.coerce.number().min(0).max(16).nullable(),
-  planned_activity: z.enum(["rest", "light", "moderate", "hard"]),
+  rest_day: z.boolean().default(false),
+  /** Without a watch: today's planned workouts (replaces the previous list). With a watch: omitted. */
+  workouts: z.array(workoutInput).max(10).optional(),
 });
+
+/** Calories for a workout. Quick picks are computed here from the MET table, never trusted from the client. */
+async function workoutRows(userId: string, date: string, weightKg: number, list: z.infer<typeof workoutInput>[]) {
+  const { workoutKcal } = await import("@/lib/engine/target");
+  return list.map((w) => {
+    if (w.kind === "other") {
+      return {
+        user_id: userId, date, kind: w.kind, minutes: w.minutes, effort: null,
+        description: w.description || null,
+        kcal: Math.min(w.kcal ?? 0, Math.round(15 * weightKg * (w.minutes / 60))),
+        source: "ai" as const,
+      };
+    }
+    const effort = w.effort ?? "sweaty";
+    return {
+      user_id: userId, date, kind: w.kind, minutes: w.minutes, effort, description: null,
+      kcal: workoutKcal(w.kind, effort, w.minutes, weightKg), source: "quick" as const,
+    };
+  });
+}
+
+async function latestWeight(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], userId: string) {
+  const { data } = await supabase.from("weights").select("kg").eq("user_id", userId).order("date", { ascending: false }).limit(1).maybeSingle();
+  return data ? Number(data.kg) : 80;
+}
 
 export async function saveCheckin(input: z.input<typeof checkinSchema>): Promise<ActionResult> {
   const { supabase, profile } = await requireUser();
   const parsed = checkinSchema.safeParse(input);
   if (!parsed.success) return fail("invalid");
+  const v = parsed.data;
   const date = localDate(new Date(), profile.timezone);
-  const { error } = await supabase.from("checkins").upsert({ user_id: profile.id, date, ...parsed.data, sleep_source: "manual" });
+  const { error } = await supabase.from("checkins").upsert({
+    user_id: profile.id,
+    date,
+    sleep_hours: v.sleep_hours,
+    sleep_source: "manual",
+    planned_activity: null,
+    rest_day: v.rest_day,
+  });
+  if (error) return fail(error.message);
+
+  if (v.workouts) {
+    await supabase.from("workouts").delete().eq("user_id", profile.id).eq("date", date);
+    const list = v.rest_day ? [] : v.workouts;
+    if (list.length) {
+      const rows = await workoutRows(profile.id, date, await latestWeight(supabase, profile.id), list);
+      const { error: wErr } = await supabase.from("workouts").insert(rows);
+      if (wErr) return fail(wErr.message);
+    }
+  }
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function deleteWorkout(id: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!z.uuid().safeParse(id).success) return fail("invalid");
+  const { error } = await supabase.from("workouts").delete().eq("id", id);
   if (error) return fail(error.message);
   revalidatePath("/");
   return { ok: true };
+}
+
+/** Free-text workout ("1 h of padel, very sweaty") → kcal estimate the person confirms before saving. */
+export async function estimateWorkoutAction(input: { text: string; minutes: number | null }): Promise<
+  { ok: true; label: string; minutes: number; kcal: number } | { ok: false; error: "ai_paused" | "not_configured" | "invalid" | "failed" }
+> {
+  const { supabase, profile } = await requireUser();
+  const parsed = z.object({ text: z.string().trim().min(2).max(300), minutes: z.number().int().min(1).max(600).nullable() }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  if (!process.env.ANTHROPIC_API_KEY || !process.env.SUPABASE_SECRET_KEY) return { ok: false, error: "not_configured" };
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { STOP_USD, costOf, spentThisMonth } = await import("@/lib/ai/budget");
+  const { estimateWorkout } = await import("@/lib/ai/workout");
+  const { checkCostAlerts } = await import("@/lib/ai/alerts");
+  const admin = createAdminClient();
+  if ((await spentThisMonth(admin)) >= STOP_USD) return { ok: false, error: "ai_paused" };
+
+  try {
+    const call = await estimateWorkout({ ...parsed.data, weightKg: await latestWeight(supabase, profile.id), language: profile.language });
+    await admin.from("ai_usage").insert({
+      user_id: profile.id, model: call.model, purpose: "workout",
+      tokens_in: call.tokensIn, tokens_out: call.tokensOut, cost_usd: costOf(call.model, call.tokensIn, call.tokensOut),
+    });
+    await checkCostAlerts(admin, await spentThisMonth(admin));
+    return { ok: true, ...call.estimate };
+  } catch (e) {
+    console.error("workout estimate failed", e);
+    return { ok: false, error: "failed" };
+  }
 }
 
 const itemSchema = z.object({

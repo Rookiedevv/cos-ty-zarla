@@ -1,6 +1,6 @@
 import { ENGINE } from "./constants";
 import { addDays } from "./dates";
-import type { BodyProfile, DayInput, HistoryDay, TargetBreakdown } from "./types";
+import type { BodyProfile, DayInput, Effort, HistoryDay, TargetBreakdown, WorkoutKind } from "./types";
 
 const round = (n: number) => Math.round(n);
 
@@ -92,24 +92,15 @@ export interface ComputeTargetArgs {
 export function computeTarget({ today, profile, day, history = [] }: ComputeTargetArgs): TargetBreakdown {
   const b = bmr(profile);
   const bodyMassIndex = bmi(profile.weightKg, profile.heightCm);
-  const baseBurn = b * ENGINE.LIFESTYLE_FACTOR[profile.lifestyle];
-
-  let activityKcal: number;
-  let activitySource: TargetBreakdown["activitySource"];
-  if (day.actualActiveKcal != null) {
-    activityKcal = day.actualActiveKcal;
-    activitySource = "watch";
-  } else if (day.plannedActivity) {
-    activityKcal = ENGINE.ACTIVITY_KCAL_PER_KG[day.plannedActivity] * profile.weightKg;
-    activitySource = "planned";
-  } else {
-    activityKcal = 0;
-    activitySource = "assumed_rest";
-  }
+  // With fresh watch data, the watch replaces the lifestyle guess and workouts entirely (SPEC §5.1).
+  const watchMode = day.watchActiveKcal != null;
+  const baseBurn = watchMode ? b * (1 + ENGINE.THERMIC_EFFECT) : b * ENGINE.LIFESTYLE_FACTOR[profile.lifestyle];
+  const activityKcal = watchMode ? day.watchActiveKcal! : day.workoutKcal;
+  const activitySource: TargetBreakdown["activitySource"] = watchMode ? "watch" : activityKcal > 0 ? "workouts" : "none";
 
   const totalBurn = (baseBurn + activityKcal) * (profile.burnAdjust ?? 1);
   const floor = floorKcal(profile);
-  const provisional = day.plannedActivity == null;
+  const provisional = !day.checkedIn;
   const maintenance = bodyMassIndex <= ENGINE.MAINTENANCE_BMI;
 
   const recDeficit = healthyDeficit(profile.weightKg, totalBurn);
@@ -122,6 +113,7 @@ export function computeTarget({ today, profile, day, history = [] }: ComputeTarg
       bmr: round(b),
       baseBurn: round(baseBurn),
       activityKcal: round(activityKcal),
+      mode: watchMode ? "watch" : "lifestyle",
       activitySource,
       totalBurn: round(totalBurn),
       deficit: round(deficit),
@@ -173,20 +165,15 @@ export function weeklyLossKg(dailyDeficit: number): number {
   return Math.round(((dailyDeficit * 7) / ENGINE.KCAL_PER_KG) * 100) / 100;
 }
 
-/**
- * Activity kcal to use today when a watch is connected (SPEC §5.3).
- * Counts only watch activity above an ordinary day for this lifestyle. During the
- * day the target never drops below the plan (you may still work out later);
- * from WATCH_SWITCH_TIME on, it reflects what actually happened.
- */
-export function activityFromWatch(args: {
-  plannedKcal: number;
-  watchActiveKcal: number;
-  lifestyle: keyof typeof ENGINE.WATCH_BASELINE_ACTIVE_KCAL;
-  localTime: string; // HH:MM
-}): number {
-  const extra = Math.max(0, args.watchActiveKcal - ENGINE.WATCH_BASELINE_ACTIVE_KCAL[args.lifestyle]);
-  return args.localTime < ENGINE.WATCH_SWITCH_TIME ? Math.max(args.plannedKcal, extra) : extra;
+/** Calories of a workout above resting: (MET − 1) × kg × hours. */
+export function workoutKcal(kind: Exclude<WorkoutKind, "other">, effort: Effort, minutes: number, weightKg: number): number {
+  const met = ENGINE.WORKOUT_MET[kind][effort];
+  return Math.round((met - 1) * weightKg * (minutes / 60));
+}
+
+/** Whether watch data is recent enough to trust for today (SPEC §5.3). */
+export function watchIsFresh(updatedAt: string | Date, now: Date): boolean {
+  return now.getTime() - new Date(updatedAt).getTime() <= ENGINE.WATCH_STALE_HOURS * 3600 * 1000;
 }
 
 /** Active kcal from the watch, or an estimate from steps when only steps arrived (~40 kcal per 1,000 steps at 80 kg). */

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Notice, Panel, PanelTitle, dec, fmt } from "@/components/ui";
 import { MealList } from "@/components/meal-list";
 import { WaterPanel } from "@/components/water-panel";
+import { WorkoutList } from "@/components/workout-list";
 import { WeightQuick } from "@/components/weight-quick";
 import type { DayState } from "@/lib/day";
 import { getDict, type Lang } from "@/lib/i18n";
@@ -97,14 +98,14 @@ export function TodayView({ day, lang, timezone }: { day: DayState; lang: Lang; 
             <details className="text-sm">
               <summary className="cursor-pointer font-semibold">{t.today.howCalculated}</summary>
               <div className="mt-2 space-y-1">
-                <Row label={t.today.breakdown.base} value={`${fmt(target.baseBurn)}`} />
+                <Row label={target.mode === "watch" ? t.today.breakdown.baseWatch : t.today.breakdown.base} value={`${fmt(target.baseBurn)}`} />
                 <Row
                   label={
                     target.activitySource === "watch"
                       ? t.today.breakdown.activityWatch
-                      : target.activitySource === "assumed_rest"
-                        ? t.today.breakdown.activityAssumed
-                        : t.today.breakdown.activity
+                      : target.activitySource === "workouts"
+                        ? t.today.breakdown.activityWorkouts
+                        : t.today.breakdown.activityNone
                   }
                   value={`+${fmt(target.activityKcal)}`}
                 />
@@ -119,6 +120,18 @@ export function TodayView({ day, lang, timezone }: { day: DayState; lang: Lang; 
           <WeightQuick />
         )}
       </Panel>
+
+      {!day.hasWatch && day.checkin && (
+        <Panel>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <PanelTitle>{t.today.workouts}</PanelTitle>
+            <Link href="/checkin" className="text-sm font-semibold text-accent underline underline-offset-2">
+              {t.today.editPlan}
+            </Link>
+          </div>
+          <WorkoutList workouts={day.workouts} restDay={day.checkin.rest_day} />
+        </Panel>
+      )}
 
       {day.window && (
         <Notice tone={day.window.open ? "info" : "fast"}>

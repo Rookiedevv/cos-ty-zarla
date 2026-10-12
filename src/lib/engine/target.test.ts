@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays, ageOn, dayBounds, localDate, zonedTimeToUtc } from "./dates";
-import { activityFromWatch, bmr, watchActiveKcal, carryOverFor, computeTarget, floorKcal, waterTargetMl } from "./target";
+import { bmr, watchActiveKcal, watchIsFresh, workoutKcal, carryOverFor, computeTarget, floorKcal, waterTargetMl } from "./target";
 import type { BodyProfile, HistoryDay } from "./types";
 
 const robert: BodyProfile = { sex: "male", ageYears: 35, heightCm: 180, weightKg: 100, lifestyle: "sedentary", pace: "auto" };
@@ -15,14 +15,14 @@ describe("bmr", () => {
 
 describe("computeTarget", () => {
   it("is provisional and assumes rest without a check-in", () => {
-    const t = computeTarget({ today, profile: robert, day: { sleepHours: null, plannedActivity: null } });
+    const t = computeTarget({ today, profile: robert, day: { sleepHours: null, checkedIn: false, workoutKcal: 0 } });
     expect(t.provisional).toBe(true);
-    expect(t.activitySource).toBe("assumed_rest");
+    expect(t.activitySource).toBe("none");
     expect(t.activityKcal).toBe(0);
   });
 
   it("auto pace = recommended: limited to 25% of burn for a sedentary 100 kg man", () => {
-    const t = computeTarget({ today, profile: robert, day: { sleepHours: 8, plannedActivity: "rest" } });
+    const t = computeTarget({ today, profile: robert, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0 } });
     // burn = 1955 * 1.2 = 2346; 25% = 586.5 (1%/week would be 1100, cap 1000)
     expect(t.totalBurn).toBe(2346);
     expect(t.target).toBe(Math.round(2346 - 586.5));
@@ -34,19 +34,19 @@ describe("computeTarget", () => {
 
   it("auto pace is limited by 1%/week for active lighter people", () => {
     const p: BodyProfile = { sex: "male", ageYears: 30, heightCm: 180, weightKg: 75, lifestyle: "physical", pace: "auto" };
-    const t = computeTarget({ today, profile: p, day: { sleepHours: 8, plannedActivity: "hard", actualActiveKcal: 1000 } });
+    const t = computeTarget({ today, profile: p, day: { sleepHours: 8, checkedIn: true, workoutKcal: 1000 } });
     expect(t.deficit).toBe(825); // 75 * 1% * 7700 / 7
     expect(t.recommendedPace).toBeCloseTo(0.01, 4);
   });
 
   it("auto pace caps the deficit at 1000 kcal", () => {
     const p: BodyProfile = { sex: "male", ageYears: 30, heightCm: 195, weightKg: 150, lifestyle: "physical", pace: "auto" };
-    const t = computeTarget({ today, profile: p, day: { sleepHours: 8, plannedActivity: "hard" } });
+    const t = computeTarget({ today, profile: p, day: { sleepHours: 8, checkedIn: true, workoutKcal: 800 } });
     expect(t.deficit).toBe(1000);
   });
 
   it("lets the user choose a harder pace, with warnings", () => {
-    const t = computeTarget({ today, profile: { ...robert, pace: 0.0125 }, day: { sleepHours: 8, plannedActivity: "rest" } });
+    const t = computeTarget({ today, profile: { ...robert, pace: 0.0125 }, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0 } });
     // 100 kg * 1.25% * 7700 / 7 = 1375 kcal deficit -> 971, below the floor -> 1500
     expect(t.target).toBe(1500);
     expect(t.warnings).toEqual(["above_1_percent", "above_25_percent_of_burn", "above_1000_kcal", "at_floor"]);
@@ -54,35 +54,47 @@ describe("computeTarget", () => {
   });
 
   it("lets the user choose an easier pace without warnings", () => {
-    const t = computeTarget({ today, profile: { ...robert, pace: 0.005 }, day: { sleepHours: 8, plannedActivity: "rest" } });
+    const t = computeTarget({ today, profile: { ...robert, pace: 0.005 }, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0 } });
     expect(t.deficit).toBe(550);
     expect(t.warnings).toEqual([]);
     expect(t.expectedKgPerWeek).toBeCloseTo(0.5, 2);
   });
 
-  it("adds planned activity scaled by weight", () => {
-    const rest = computeTarget({ today, profile: robert, day: { sleepHours: 8, plannedActivity: "rest" } });
-    const hard = computeTarget({ today, profile: robert, day: { sleepHours: 8, plannedActivity: "hard" } });
+  it("adds planned workouts on top of the lifestyle burn", () => {
+    const rest = computeTarget({ today, profile: robert, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0 } });
+    const hard = computeTarget({ today, profile: robert, day: { sleepHours: 8, checkedIn: true, workoutKcal: 800 } });
+    expect(hard.mode).toBe("lifestyle");
+    expect(hard.activitySource).toBe("workouts");
     expect(hard.activityKcal).toBe(800);
     expect(hard.target).toBeGreaterThan(rest.target);
   });
 
-  it("prefers actual watch activity over the plan", () => {
-    const t = computeTarget({ today, profile: robert, day: { sleepHours: 8, plannedActivity: "hard", actualActiveKcal: 120 } });
+  it("with a watch: resting burn + 10% digestion + everything measured, ignoring lifestyle and workouts", () => {
+    const t = computeTarget({ today, profile: robert, day: { sleepHours: 8, checkedIn: true, workoutKcal: 800, watchActiveKcal: 600 } });
+    expect(t.mode).toBe("watch");
     expect(t.activitySource).toBe("watch");
-    expect(t.activityKcal).toBe(120);
+    expect(t.baseBurn).toBe(Math.round(1955 * 1.1));
+    expect(t.activityKcal).toBe(600);
+    expect(t.totalBurn).toBe(Math.round(1955 * 1.1 + 600));
+  });
+
+  it("with a watch the target grows during the day but never drops below the floor", () => {
+    const morning = computeTarget({ today, profile: robert, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0, watchActiveKcal: 20 } });
+    const evening = computeTarget({ today, profile: robert, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0, watchActiveKcal: 900 } });
+    expect(evening.target).toBeGreaterThan(morning.target);
+    expect(morning.target).toBeGreaterThanOrEqual(1500);
   });
 
   it("shrinks the deficit by 10% after short sleep", () => {
-    const ok = computeTarget({ today, profile: robert, day: { sleepHours: 7, plannedActivity: "rest" } });
-    const short = computeTarget({ today, profile: robert, day: { sleepHours: 5, plannedActivity: "rest" } });
+    const ok = computeTarget({ today, profile: robert, day: { sleepHours: 7, checkedIn: true, workoutKcal: 0 } });
+    const short = computeTarget({ today, profile: robert, day: { sleepHours: 5, checkedIn: true, workoutKcal: 0 } });
     expect(short.sleepAdjusted).toBe(true);
     expect(Math.abs(short.deficit - ok.deficit * 0.9)).toBeLessThanOrEqual(1);
   });
 
   it("never goes below the floor", () => {
     const small: BodyProfile = { sex: "female", ageYears: 60, heightCm: 155, weightKg: 62, lifestyle: "sedentary", pace: 0.015 };
-    const t = computeTarget({ today, profile: small, day: { sleepHours: 8, plannedActivity: "rest" } });
+    const t = computeTarget({ today, profile: small, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0 } });
     expect(t.target).toBe(1200);
     expect(t.target).toBeGreaterThanOrEqual(floorKcal(small));
     expect(t.target).toBeGreaterThanOrEqual(1200);
@@ -90,7 +102,7 @@ describe("computeTarget", () => {
 
   it("switches to maintenance at BMI 20", () => {
     const lean: BodyProfile = { sex: "male", ageYears: 30, heightCm: 180, weightKg: 64.8, lifestyle: "sedentary", pace: "auto" };
-    const t = computeTarget({ today, profile: lean, day: { sleepHours: 8, plannedActivity: "rest" } });
+    const t = computeTarget({ today, profile: lean, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0 } });
     expect(t.maintenance).toBe(true);
     expect(t.deficit).toBe(0);
     expect(t.target).toBe(t.totalBurn);
@@ -98,7 +110,7 @@ describe("computeTarget", () => {
   });
 
   it("uses the fixed low-day target on 5:2 low days", () => {
-    const t = computeTarget({ today, profile: robert, day: { sleepHours: 8, plannedActivity: "rest", isLowDay: true } });
+    const t = computeTarget({ today, profile: robert, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0, isLowDay: true } });
     expect(t.target).toBe(600);
     expect(t.carryOver).toBe(0);
   });
@@ -145,7 +157,7 @@ describe("carryOverFor", () => {
 
   it("is applied through computeTarget and respects the floor", () => {
     const h = [day(-1, 1760, 1760, 2400)];
-    const t = computeTarget({ today, profile: robert, day: { sleepHours: 8, plannedActivity: "rest" }, history: h });
+    const t = computeTarget({ today, profile: robert, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0 }, history: h });
     expect(t.carryOver).toBeGreaterThan(0);
     expect(t.target).toBe(t.preCarryTarget - t.carryOver);
   });
@@ -174,23 +186,22 @@ describe("dates", () => {
   });
 });
 
-describe("activityFromWatch", () => {
-  const base = { plannedKcal: 250, lifestyle: "sedentary" as const };
-  it("ignores ordinary walking around (first 300 kcal for a desk job)", () => {
-    expect(activityFromWatch({ ...base, plannedKcal: 0, watchActiveKcal: 280, localTime: "20:00" })).toBe(0);
-    expect(activityFromWatch({ ...base, plannedKcal: 0, watchActiveKcal: 700, localTime: "20:00" })).toBe(400);
+describe("workoutKcal", () => {
+  it("counts only calories above resting: (MET − 1) × kg × hours", () => {
+    expect(workoutKcal("run", "sweaty", 60, 80)).toBe(Math.round(8.8 * 80));
+    expect(workoutKcal("walk", "easy", 60, 80)).toBe(160);
+    expect(workoutKcal("gym", "exhausting", 45, 100)).toBe(Math.round(5 * 100 * 0.75));
   });
-  it("keeps at least the plan during the day", () => {
-    expect(activityFromWatch({ ...base, watchActiveKcal: 100, localTime: "10:00" })).toBe(250);
+  it("is more for harder effort", () => {
+    expect(workoutKcal("bike", "exhausting", 60, 80)).toBeGreaterThan(workoutKcal("bike", "easy", 60, 80));
   });
-  it("raises the target live when the watch shows more than planned", () => {
-    expect(activityFromWatch({ ...base, watchActiveKcal: 1000, localTime: "14:00" })).toBe(700);
-  });
-  it("uses only real activity from 18:00", () => {
-    expect(activityFromWatch({ ...base, watchActiveKcal: 400, localTime: "18:00" })).toBe(100);
-  });
-  it("uses a higher baseline for physical jobs", () => {
-    expect(activityFromWatch({ plannedKcal: 0, lifestyle: "physical", watchActiveKcal: 900, localTime: "21:00" })).toBe(200);
+});
+
+describe("watchIsFresh", () => {
+  const now = new Date("2026-10-12T12:00:00Z");
+  it("trusts data up to 6 hours old", () => {
+    expect(watchIsFresh("2026-10-12T06:30:00Z", now)).toBe(true);
+    expect(watchIsFresh("2026-10-12T05:30:00Z", now)).toBe(false);
   });
 });
 

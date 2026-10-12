@@ -158,3 +158,8 @@ Open **Żarła Sync**, type the code, tap **Połącz**, then **Allow** all healt
 Tap **Synchronizuj teraz** to test. Settings → Zegarek should show "Ostatnia synchronizacja przed chwilą".
 
 Updates: every change to the companion app publishes a new download at the same link; installing it replaces the old version and keeps the connection.
+
+---
+
+# Workouts and watch-only burn
+Supabase → **SQL Editor** → run `supabase/migrations/20261012000006_workouts.sql`.
