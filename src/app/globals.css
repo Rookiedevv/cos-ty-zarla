@@ -2,28 +2,52 @@
 @import "@fontsource-variable/bricolage-grotesque/standard.css";
 
 /*
-  Dark-first look. Meals read like a menu board: name, dotted leader, kcal.
+  Clean look. Meals read like a menu board: name, dotted leader, kcal.
   Token names (tile, enamel, kompot…) come from the first milk-bar palette.
 */
 :root {
-  /* Dark-first palette: charcoal surfaces, lime accent, coral for "over", amber for fasting. */
-  color-scheme: dark;
-  --tile: #111316;        /* page background */
-  --enamel: #1b1e23;      /* cards */
-  --ink: #f1f3f6;         /* main text */
-  --ink-soft: #9aa3ae;    /* secondary text */
-  --grout: #2b3038;       /* hairlines, quiet borders */
-  --kompot: #ff6b5e;      /* over target, errors */
-  --mustard: #f5b83d;     /* fasting, attention */
-  --mustard-bg: #3a2e12;
-  --water: #4cc3f5;
-  --water-bg: #0f2a38;
-  --focus: #b4f04a;
-  --accent: #b4f04a;      /* primary actions, progress */
-  --on-accent: #111316;
-  --outline: #3a4049;     /* secondary button borders */
-  --panel-border: #2b3038;
-  --panel-shadow: none;
+  /* Clean palette: white cards on light grey, dark grey text, one blue accent.
+     Red only for "over target", amber for fasting. */
+  color-scheme: light;
+  --tile: #f4f5f7;        /* page background */
+  --enamel: #ffffff;      /* cards */
+  --ink: #1d2128;         /* main text */
+  --ink-soft: #5f6b7a;    /* secondary text */
+  --grout: #e3e6eb;       /* hairlines, quiet borders */
+  --kompot: #d92d20;      /* over target, errors */
+  --mustard: #b54708;     /* fasting, attention */
+  --mustard-bg: #fef0c7;
+  --water: #0e7490;
+  --water-bg: #cff4fc;
+  --focus: #2563eb;
+  --accent: #2563eb;      /* primary actions, progress */
+  --on-accent: #ffffff;
+  --outline: #cfd4dc;     /* secondary button borders */
+  --panel-border: #e3e6eb;
+  --panel-shadow: 0 1px 2px rgb(16 24 40 / 0.06);
+}
+
+/* Same palette for phones in night mode. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --tile: #111316;
+    --enamel: #1b1e23;
+    --ink: #f1f3f6;
+    --ink-soft: #9aa3ae;
+    --grout: #2b3038;
+    --kompot: #ff6b5e;
+    --mustard: #f5b83d;
+    --mustard-bg: #3a2e12;
+    --water: #4cc3f5;
+    --water-bg: #0f2a38;
+    --focus: #5b9bff;
+    --accent: #3b82f6;
+    --on-accent: #ffffff;
+    --outline: #3a4049;
+    --panel-border: #2b3038;
+    --panel-shadow: none;
+  }
 }
 
 @theme inline {

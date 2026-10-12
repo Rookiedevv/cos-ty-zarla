@@ -4,15 +4,18 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Coś ty żarła",
   description: "Calories, fasting and a weekly weigh-in for two.",
-  appleWebApp: { capable: true, title: "Coś ty żarła", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "Coś ty żarła", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#111316",
-  colorScheme: "dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f5f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#111316" },
+  ],
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

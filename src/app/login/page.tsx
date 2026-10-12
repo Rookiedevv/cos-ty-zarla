@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <h1 className="board text-6xl leading-[0.9]">
           Coś ty
           <br />
-          <span className="text-kompot">żarła?</span>
+          <span className="text-accent">żarła?</span>
         </h1>
         <p className="mt-4 text-lg">{t.login.tagline}</p>
 
