@@ -248,6 +248,17 @@ export const en = {
       weighin: ["Weigh-in", "On your weigh-in day, if not logged yet"],
     },
   },
+  costs: {
+    title: "AI costs this month",
+    total: "Spent so far",
+    projected: "Projected for the month",
+    estimates: "Estimates",
+    perEstimate: "Average per estimate",
+    you: "You",
+    others: "Others",
+    limits: (warn: number, stop: number) => `Alert at $${warn}, AI pauses at $${stop}.`,
+    none: "No AI estimates yet this month.",
+  },
   settings: {
     title: "Settings",
     plan: "Plan",

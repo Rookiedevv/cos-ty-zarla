@@ -1,4 +1,5 @@
 import { signOut } from "@/app/actions";
+import { AiCosts, type CostRow } from "@/components/ai-costs";
 import { AllowList } from "@/components/allow-list";
 import { NotificationSettings } from "@/components/notification-settings";
 import { PlanForm } from "@/components/plan-form";
@@ -14,7 +15,11 @@ export default async function SettingsPage() {
   const last = w ? { kg: Number(w.kg), date: w.date as string } : null;
 
   let emails: string[] = [];
+  let costRows: CostRow[] = [];
   if (profile.is_admin) {
+    const monthStart = `${new Date().toISOString().slice(0, 7)}-01T00:00:00Z`;
+    const { data: usage } = await supabase.from("ai_usage").select("user_id, cost_usd").gte("at", monthStart);
+    costRows = (usage ?? []) as CostRow[];
     const { data } = await supabase.from("allowed_emails").select("email").order("added_at");
     emails = (data ?? []).map((r) => r.email as string);
   }
@@ -27,6 +32,7 @@ export default async function SettingsPage() {
       </Panel>
       <NotificationSettings prefs={profile.notification_prefs ?? {}} />
       <PlanForm mode="settings" profile={profile} weightKg={last?.kg ?? null} />
+      {profile.is_admin && <AiCosts rows={costRows} selfId={profile.id} lang={profile.language} />}
       {profile.is_admin && <AllowList emails={emails} self={profile.email} />}
       <form action={signOut}>
         <Button variant="ghost" className="w-full">

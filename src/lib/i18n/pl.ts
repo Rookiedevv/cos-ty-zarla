@@ -250,6 +250,17 @@ export const pl: Dict = {
       weighin: ["Ważenie", "W dniu ważenia, jeśli jeszcze nie wpisane"],
     },
   },
+  costs: {
+    title: "Koszty AI w tym miesiącu",
+    total: "Wydano do tej pory",
+    projected: "Prognoza na cały miesiąc",
+    estimates: "Szacunki",
+    perEstimate: "Średnio na szacunek",
+    you: "Ty",
+    others: "Pozostali",
+    limits: (warn, stop) => `Alert przy $${warn}, AI wstrzymane przy $${stop}.`,
+    none: "W tym miesiącu nie było jeszcze szacunków AI.",
+  },
   settings: {
     title: "Ustawienia",
     plan: "Plan",
