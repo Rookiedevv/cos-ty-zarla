@@ -139,10 +139,31 @@ export async function saveCheckin(input: z.input<typeof checkinSchema>): Promise
   return { ok: true };
 }
 
+const itemSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  amount: z.coerce.number().min(0).max(10000).nullable().optional(),
+  unit: z.enum(["g", "ml", "pcs"]).nullable().optional(),
+  kcal: z.coerce.number().int().min(0).max(10000),
+  protein_g: z.coerce.number().min(0).max(500).nullable().optional(),
+  barcode: z.string().max(20).nullable().optional(),
+  source: z.enum(["manual", "ai", "barcode"]).default("manual"),
+});
+
+const photoSchema = z.object({
+  data: z.string().max(3_000_000).regex(/^[A-Za-z0-9+/=]+$/),
+  mediaType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+});
+
 const mealSchema = z.object({
   description: z.string().trim().min(1).max(2000),
-  total_kcal: z.coerce.number().int().min(0).max(10000),
+  /** Manual entry: one total. AI entry: the confirmed items, and the total is their sum. */
+  total_kcal: z.coerce.number().int().min(0).max(10000).optional(),
   protein_g: z.union([z.literal(""), z.coerce.number().min(0).max(500)]).optional(),
+  items: z.array(itemSchema).max(30).optional(),
+  source: z.enum(["manual", "ai_text", "ai_photo", "barcode"]).default("manual"),
+  verdict: z.string().max(400).optional(),
+  ai_draft: z.unknown().optional(),
+  photo: photoSchema.optional(),
   when: z.enum(["now", "m30", "h1", "h2", "h3", "custom"]),
   custom_date: z.iso.date().optional(),
   custom_time: time.optional(),
@@ -156,6 +177,13 @@ export async function logMeal(input: z.input<typeof mealSchema>): Promise<Action
   if (!parsed.success) return fail(parsed.error.issues.map((i) => i.path.join(".")).join(", "));
   const v = parsed.data;
 
+  const items = v.items ?? [];
+  const totalKcal = items.length ? items.reduce((s, i) => s + i.kcal, 0) : v.total_kcal;
+  if (totalKcal == null || totalKcal > 10000) return fail("total_kcal");
+  const protein = items.length
+    ? Math.round(items.reduce((s, i) => s + (i.protein_g ?? 0), 0) * 10) / 10
+    : v.protein_g === "" || v.protein_g == null ? null : v.protein_g;
+
   const now = new Date();
   let eatenAt: Date;
   if (v.when === "custom") {
@@ -166,21 +194,120 @@ export async function logMeal(input: z.input<typeof mealSchema>): Promise<Action
     eatenAt = new Date(now.getTime() - WHEN_MINUTES[v.when] * 60000);
   }
 
+  const mealId = crypto.randomUUID();
+  let photoPath: string | null = null;
+  if (v.photo) {
+    const ext = v.photo.mediaType.split("/")[1].replace("jpeg", "jpg");
+    photoPath = `${profile.id}/${mealId}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("meal-photos")
+      .upload(photoPath, Buffer.from(v.photo.data, "base64"), { contentType: v.photo.mediaType, upsert: false });
+    if (upErr) {
+      console.error("photo upload failed", upErr.message);
+      photoPath = null; // the meal still saves without its photo
+    }
+  }
+
   const outside = profile.method === "if" && !insideWindow(localTime(eatenAt, profile.timezone), profile.method_config ?? {});
   const { error } = await supabase.from("meals").insert({
+    id: mealId,
     user_id: profile.id,
     eaten_at: eatenAt.toISOString(),
     eaten_date: localDate(eatenAt, profile.timezone),
     description: v.description,
-    source: "manual",
-    total_kcal: v.total_kcal,
-    protein_g: v.protein_g === "" || v.protein_g == null ? null : v.protein_g,
+    source: v.source,
+    total_kcal: totalKcal,
+    protein_g: protein,
+    verdict: v.verdict || null,
+    ai_draft: v.ai_draft ?? null,
+    photo_path: photoPath,
     outside_window: outside,
   });
   if (error) return fail(error.message);
+
+  if (items.length) {
+    const { error: itemsErr } = await supabase.from("meal_items").insert(
+      items.map((i, position) => ({
+        meal_id: mealId,
+        user_id: profile.id,
+        position,
+        name: i.name,
+        amount: i.amount ?? null,
+        unit: i.unit ?? null,
+        kcal: i.kcal,
+        protein_g: i.protein_g ?? null,
+        barcode: i.barcode ?? null,
+        source: i.source,
+      })),
+    );
+    if (itemsErr) console.error("meal items failed", itemsErr.message);
+  }
+
   revalidatePath("/");
   revalidatePath("/history");
   return { ok: true };
+}
+
+// ───────────────────────── AI estimate ─────────────────────────
+
+const estimateSchema = z.object({
+  photo: photoSchema.optional(),
+  text: z.string().max(1500).optional(),
+  barcodes: z.array(z.string().regex(/^\d{8,14}$/)).max(3).default([]),
+  answers: z.array(z.object({ question: z.string().max(300), answer: z.string().max(300) })).max(9).default([]),
+  round: z.number().int().min(1).max(3),
+});
+
+export type EstimateResponse =
+  | { ok: true; estimate: import("@/lib/ai/estimate").Estimate; products: import("@/lib/ai/off").Product[] }
+  | { ok: false; error: "ai_paused" | "not_configured" | "invalid" | "failed" };
+
+/** Photo and/or text in, an editable estimate (and maybe follow-up questions) out. */
+export async function estimateMealAction(input: z.input<typeof estimateSchema>): Promise<EstimateResponse> {
+  const { profile } = await requireUser();
+  const parsed = estimateSchema.safeParse(input);
+  if (!parsed.success || (!parsed.data.photo && !parsed.data.text?.trim() && !parsed.data.barcodes.length)) {
+    return { ok: false, error: "invalid" };
+  }
+  const v = parsed.data;
+  if (!process.env.ANTHROPIC_API_KEY || !process.env.SUPABASE_SECRET_KEY) return { ok: false, error: "not_configured" };
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { STOP_USD, costOf, spentThisMonth } = await import("@/lib/ai/budget");
+  const { estimateMeal } = await import("@/lib/ai/estimate");
+  const { lookupBarcode } = await import("@/lib/ai/off");
+  const { checkCostAlerts } = await import("@/lib/ai/alerts");
+  const admin = createAdminClient();
+
+  if ((await spentThisMonth(admin)) >= STOP_USD) return { ok: false, error: "ai_paused" };
+
+  const products = (await Promise.all([...new Set(v.barcodes)].map(lookupBarcode))).filter((p) => p != null);
+
+  try {
+    const call = await estimateMeal({
+      photo: v.photo,
+      text: v.text,
+      products,
+      answers: v.answers,
+      round: v.round,
+      language: profile.language,
+      method: profile.method,
+      focus: profile.food_focus,
+    });
+    await admin.from("ai_usage").insert({
+      user_id: profile.id,
+      model: call.model,
+      purpose: v.photo ? "meal_photo" : "meal_text",
+      tokens_in: call.tokensIn,
+      tokens_out: call.tokensOut,
+      cost_usd: costOf(call.model, call.tokensIn, call.tokensOut),
+    });
+    await checkCostAlerts(admin, await spentThisMonth(admin));
+    return { ok: true, estimate: call.estimate, products };
+  } catch (e) {
+    console.error("estimate failed", e);
+    return { ok: false, error: (e as Error).message === "NO_API_KEY" ? "not_configured" : "failed" };
+  }
 }
 
 export async function deleteMeal(id: string): Promise<ActionResult> {

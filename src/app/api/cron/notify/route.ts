@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   const { data: subs } = await admin.from("push_subscriptions").select("id, user_id, endpoint, p256dh, auth");
   const byUser = new Map<string, StoredSubscription[]>();
   for (const s of subs ?? []) byUser.set(s.user_id as string, [...(byUser.get(s.user_id as string) ?? []), s as StoredSubscription]);
-  if (byUser.size === 0) return NextResponse.json({ users: 0, sent: 0 });
+  if (byUser.size === 0) return NextResponse.json({ users: 0, sent: 0, photosRemoved: await removeOldPhotos(admin, now) });
 
   const { data: profiles } = await admin.from("profiles").select("*").in("id", [...byUser.keys()]).not("onboarded_at", "is", null);
 
@@ -73,5 +73,28 @@ export async function POST(request: NextRequest) {
       summary.push({ user: profile.id.slice(0, 8), sent: ["error"] });
     }
   }
-  return NextResponse.json({ at: now.toISOString(), summary });
+  const photosRemoved = await removeOldPhotos(admin, now);
+  return NextResponse.json({ at: now.toISOString(), summary, photosRemoved });
+}
+
+/** Meal photos are kept 90 days; the meal, its description and items stay forever (SPEC §7.3). */
+async function removeOldPhotos(admin: ReturnType<typeof createAdminClient>, now: Date): Promise<number> {
+  const cutoff = new Date(now.getTime() - 90 * 24 * 3600 * 1000).toISOString();
+  const { data: old } = await admin
+    .from("meals")
+    .select("id, photo_path")
+    .not("photo_path", "is", null)
+    .lt("logged_at", cutoff)
+    .limit(50);
+  if (!old?.length) return 0;
+  const { error } = await admin.storage.from("meal-photos").remove(old.map((m) => m.photo_path as string));
+  if (error) {
+    console.error("photo cleanup failed", error.message);
+    return 0;
+  }
+  await admin
+    .from("meals")
+    .update({ photo_path: null, photo_deleted_at: now.toISOString() })
+    .in("id", old.map((m) => m.id as string));
+  return old.length;
 }

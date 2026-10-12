@@ -111,3 +111,30 @@ To pause it later: **Integrations → Cron → Jobs** → `send-reminders`.
 
 ## 5. Turn reminders on, on each phone
 Open the app from its home-screen icon → **Settings → Reminders → Turn on reminders on this phone** → **Allow**. Tap **Send a test reminder** to check.
+
+---
+
+# AI meal estimates
+
+About 10 minutes, once.
+
+## 1. Add the new tables and photo storage
+Supabase → **SQL Editor → New query**. Run each file, one at a time:
+- `supabase/migrations/20261012000003_ai.sql`
+- `supabase/migrations/20261012000004_photo_storage.sql`
+
+## 2. Get a Claude API key
+1. Go to **console.anthropic.com** and sign up.
+2. **Billing**: add a card and buy **$5** of credit. With Haiku, two people typically spend under $1 a month.
+3. **Limits**: set a monthly spend limit of **$10** as a backstop. The app also stops itself at $10 and alerts you at $5.
+4. **API Keys → Create key**, name it `cos-ty-zarla`, and copy it (starts with `sk-ant-`). It's shown only once.
+
+This key spends your money: paste it only into Vercel, never into a chat.
+
+## 3. Add it to Vercel
+Vercel → project → **Settings → Environment Variables → Add**:
+- Key: `ANTHROPIC_API_KEY`, Value: the `sk-ant-…` key.
+
+Then **Deployments** → ⋯ on the top one → **Redeploy**.
+
+Optional: `AI_MODEL` switches the model later (e.g. `claude-sonnet-5-5` for better photo accuracy at ~20× the price).

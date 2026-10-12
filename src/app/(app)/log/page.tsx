@@ -1,8 +1,8 @@
-import { LogMealForm } from "@/components/log-meal-form";
+import { AiMealFlow } from "@/components/ai-meal-flow";
 import { todayFor } from "@/lib/day";
 import { requireOnboardedUser } from "@/lib/session";
 
 export default async function LogPage() {
   const { profile } = await requireOnboardedUser();
-  return <LogMealForm today={todayFor(profile)} showProtein={profile.food_focus === "high_protein"} />;
+  return <AiMealFlow today={todayFor(profile)} showProtein={profile.food_focus === "high_protein"} />;
 }
