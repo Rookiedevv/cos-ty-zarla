@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays, ageOn, dayBounds, localDate, zonedTimeToUtc } from "./dates";
-import { bmr, carryOverFor, computeTarget, floorKcal, waterTargetMl } from "./target";
+import { activityFromWatch, bmr, carryOverFor, computeTarget, floorKcal, waterTargetMl } from "./target";
 import type { BodyProfile, HistoryDay } from "./types";
 
 const robert: BodyProfile = { sex: "male", ageYears: 35, heightCm: 180, weightKg: 100, lifestyle: "sedentary", pace: "auto" };
@@ -171,5 +171,25 @@ describe("dates", () => {
   it("computes age", () => {
     expect(ageOn("1990-10-13", "2026-10-12")).toBe(35);
     expect(ageOn("1990-10-12", "2026-10-12")).toBe(36);
+  });
+});
+
+describe("activityFromWatch", () => {
+  const base = { plannedKcal: 250, lifestyle: "sedentary" as const };
+  it("ignores ordinary walking around (first 300 kcal for a desk job)", () => {
+    expect(activityFromWatch({ ...base, plannedKcal: 0, watchActiveKcal: 280, localTime: "20:00" })).toBe(0);
+    expect(activityFromWatch({ ...base, plannedKcal: 0, watchActiveKcal: 700, localTime: "20:00" })).toBe(400);
+  });
+  it("keeps at least the plan during the day", () => {
+    expect(activityFromWatch({ ...base, watchActiveKcal: 100, localTime: "10:00" })).toBe(250);
+  });
+  it("raises the target live when the watch shows more than planned", () => {
+    expect(activityFromWatch({ ...base, watchActiveKcal: 1000, localTime: "14:00" })).toBe(700);
+  });
+  it("uses only real activity from 18:00", () => {
+    expect(activityFromWatch({ ...base, watchActiveKcal: 400, localTime: "18:00" })).toBe(100);
+  });
+  it("uses a higher baseline for physical jobs", () => {
+    expect(activityFromWatch({ plannedKcal: 0, lifestyle: "physical", watchActiveKcal: 900, localTime: "21:00" })).toBe(200);
   });
 });

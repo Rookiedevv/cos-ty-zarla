@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Żarła Sync</string>
+    <string name="title">Coś ty żarła · Sync</string>
+    <string name="intro">Sends your watch data (sleep, steps, workouts) from Health Connect to the Coś ty żarła app every 15 minutes.</string>
+    <string name="hc_missing">Health Connect isn\'t available on this phone. It needs Android 14 or newer.</string>
+    <string name="code_label">Connection code from the app\'s Settings → Watch</string>
+    <string name="code_hint">XXXX-XXXX</string>
+    <string name="connect">Connect</string>
+    <string name="connecting">Connecting…</string>
+    <string name="bad_code">That code didn\'t work. Make a new one in Settings → Watch and try again.</string>
+    <string name="network_error">Couldn\'t reach the server. Check your connection and try again.</string>
+    <string name="connected">Connected to your account.</string>
+    <string name="perm_needed">Allow access to steps, sleep, active calories and exercise so the app can read them.</string>
+    <string name="perm_background">Also allow reading in the background, so syncing works when this app is closed.</string>
+    <string name="perm_ok">Health data access: allowed.</string>
+    <string name="allow">Allow health data</string>
+    <string name="sync_now">Sync now</string>
+    <string name="syncing">Syncing…</string>
+    <string name="last_sync">Last sync: %1$s</string>
+    <string name="never">never</string>
+    <string name="sync_ok">Synced: %1$d steps, %2$d kcal active, %3$d min sleep.</string>
+    <string name="sync_failed">Sync failed: %1$s</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="disconnected">Disconnected. Make a new code in the app to connect again.</string>
+    <string name="rationale_title">Why this app reads health data</string>
+    <string name="rationale_body">Coś ty żarła Sync reads your steps, active calories, workouts and sleep from Health Connect and sends daily totals to your private Coś ty żarła account. The app uses them to adjust your daily calorie target and pre-fill your sleep. Nothing is shared with anyone else, and you can disconnect at any time.</string>
+</resources>

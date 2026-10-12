@@ -448,3 +448,29 @@ export async function sendTestNotification(): Promise<ActionResult & { devices?:
   }
   return ok > 0 ? { ok: true, devices: ok } : fail("send_failed");
 }
+
+// ───────────────────────── Watch / companion app ─────────────────────────
+
+/** A one-time code to type into the companion app. */
+export async function createPairingCode(): Promise<{ ok: true; code: string; expiresAt: string } | { ok: false; error: string }> {
+  const { profile } = await requireUser();
+  const { newPairingCode, sha256, PAIRING_MINUTES } = await import("@/lib/device");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  // Old unused codes for this person stop working when a new one is made.
+  await admin.from("pairing_codes").delete().eq("user_id", profile.id).is("used_at", null);
+  const code = newPairingCode();
+  const expiresAt = new Date(Date.now() + PAIRING_MINUTES * 60000).toISOString();
+  const { error } = await admin.from("pairing_codes").insert({ code_hash: sha256(code), user_id: profile.id, expires_at: expiresAt });
+  if (error) return { ok: false, error: "failed" };
+  return { ok: true, code, expiresAt };
+}
+
+export async function disconnectDevice(id: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!z.uuid().safeParse(id).success) return fail("invalid");
+  const { error } = await supabase.from("device_tokens").delete().eq("id", id);
+  if (error) return fail(error.message);
+  revalidatePath("/settings");
+  return { ok: true };
+}

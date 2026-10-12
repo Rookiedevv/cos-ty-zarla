@@ -4,6 +4,7 @@ import { AllowList } from "@/components/allow-list";
 import { NotificationSettings } from "@/components/notification-settings";
 import { PlanForm } from "@/components/plan-form";
 import { Button, Panel } from "@/components/ui";
+import { WatchSettings, type Device } from "@/components/watch-settings";
 import { WeightQuick } from "@/components/weight-quick";
 import { getDict } from "@/lib/i18n";
 import { requireOnboardedUser } from "@/lib/session";
@@ -13,6 +14,13 @@ export default async function SettingsPage() {
   const t = getDict(profile.language);
   const { data: w } = await supabase.from("weights").select("kg, date").order("date", { ascending: false }).limit(1).maybeSingle();
   const last = w ? { kg: Number(w.kg), date: w.date as string } : null;
+
+  const { data: deviceRows } = await supabase
+    .from("device_tokens")
+    .select("id, label, created_at, last_sync_at")
+    .eq("user_id", profile.id)
+    .order("created_at");
+  const devices = (deviceRows ?? []) as Device[];
 
   let emails: string[] = [];
   let costRows: CostRow[] = [];
@@ -31,6 +39,7 @@ export default async function SettingsPage() {
         <WeightQuick last={last} />
       </Panel>
       <NotificationSettings prefs={profile.notification_prefs ?? {}} />
+      <WatchSettings devices={devices} nowIso={new Date().toISOString()} />
       <PlanForm mode="settings" profile={profile} weightKg={last?.kg ?? null} />
       {profile.is_admin && <AiCosts rows={costRows} selfId={profile.id} lang={profile.language} />}
       {profile.is_admin && <AllowList emails={emails} self={profile.email} />}

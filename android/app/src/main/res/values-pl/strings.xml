@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Żarła Sync</string>
+    <string name="title">Coś ty żarła · Sync</string>
+    <string name="intro">Co 15 minut wysyła dane z zegarka (sen, kroki, treningi) z Health Connect do aplikacji Coś ty żarła.</string>
+    <string name="hc_missing">Health Connect nie jest dostępny na tym telefonie. Wymaga Androida 14 lub nowszego.</string>
+    <string name="code_label">Kod połączenia z aplikacji: Ustawienia → Zegarek</string>
+    <string name="code_hint">XXXX-XXXX</string>
+    <string name="connect">Połącz</string>
+    <string name="connecting">Łączę…</string>
+    <string name="bad_code">Ten kod nie zadziałał. Utwórz nowy w Ustawienia → Zegarek i spróbuj ponownie.</string>
+    <string name="network_error">Brak połączenia z serwerem. Sprawdź internet i spróbuj ponownie.</string>
+    <string name="connected">Połączono z Twoim kontem.</string>
+    <string name="perm_needed">Zezwól na dostęp do kroków, snu, aktywnych kalorii i ćwiczeń, żeby aplikacja mogła je odczytać.</string>
+    <string name="perm_background">Zezwól też na odczyt w tle, żeby synchronizacja działała przy zamkniętej aplikacji.</string>
+    <string name="perm_ok">Dostęp do danych zdrowotnych: przyznany.</string>
+    <string name="allow">Zezwól na dane zdrowotne</string>
+    <string name="sync_now">Synchronizuj teraz</string>
+    <string name="syncing">Synchronizuję…</string>
+    <string name="last_sync">Ostatnia synchronizacja: %1$s</string>
+    <string name="never">nigdy</string>
+    <string name="sync_ok">Zsynchronizowano: %1$d kroków, %2$d kcal aktywności, %3$d min snu.</string>
+    <string name="sync_failed">Synchronizacja nie powiodła się: %1$s</string>
+    <string name="disconnect">Odłącz</string>
+    <string name="disconnected">Odłączono. Utwórz nowy kod w aplikacji, żeby połączyć ponownie.</string>
+    <string name="rationale_title">Dlaczego aplikacja czyta dane zdrowotne</string>
+    <string name="rationale_body">Coś ty żarła Sync odczytuje z Health Connect kroki, aktywne kalorie, treningi i sen, i wysyła dzienne sumy na Twoje prywatne konto Coś ty żarła. Aplikacja używa ich do dopasowania dziennego celu kalorii i podpowiedzi snu. Nic nie jest udostępniane nikomu innemu, a połączenie możesz zawsze odłączyć.</string>
+</resources>

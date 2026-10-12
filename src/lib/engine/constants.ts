@@ -47,6 +47,14 @@ export const ENGINE = {
   /** Rough exercise hours implied by each planned activity level. */
   ACTIVITY_EXERCISE_HOURS: { rest: 0, light: 0.5, moderate: 1, hard: 1.5 },
 
+  /**
+   * Watch "active calories" include ordinary walking around, which the lifestyle
+   * factor already counts. Only activity above this daily amount adds to the target.
+   */
+  WATCH_BASELINE_ACTIVE_KCAL: { sedentary: 300, on_feet: 500, physical: 700 },
+  /** Until this local time the target uses the higher of plan and watch; after it, only what the watch measured. */
+  WATCH_SWITCH_TIME: "18:00",
+
   /** High-protein focus: grams of protein per kg. */
   PROTEIN_G_PER_KG: 1.6,
 } as const;

@@ -1,8 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// /api/cron checks its own secret; /sw.js must load without a session.
-const PUBLIC_PATHS = ["/login", "/auth", "/not-allowed", "/manifest.webmanifest", "/api/cron", "/sw.js"];
+// /api/cron and /api/device check their own secrets; /sw.js must load without a session.
+const PUBLIC_PATHS = ["/login", "/auth", "/not-allowed", "/manifest.webmanifest", "/api/cron", "/api/device", "/sw.js"];
 
 /**
  * Refreshes the Supabase session on every request and sends signed-out

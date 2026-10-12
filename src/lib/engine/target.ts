@@ -172,3 +172,19 @@ export function waterTargetMl(weightKg: number, overrideMl: number | null, exerc
 export function weeklyLossKg(dailyDeficit: number): number {
   return Math.round(((dailyDeficit * 7) / ENGINE.KCAL_PER_KG) * 100) / 100;
 }
+
+/**
+ * Activity kcal to use today when a watch is connected (SPEC §5.3).
+ * Counts only watch activity above an ordinary day for this lifestyle. During the
+ * day the target never drops below the plan (you may still work out later);
+ * from WATCH_SWITCH_TIME on, it reflects what actually happened.
+ */
+export function activityFromWatch(args: {
+  plannedKcal: number;
+  watchActiveKcal: number;
+  lifestyle: keyof typeof ENGINE.WATCH_BASELINE_ACTIVE_KCAL;
+  localTime: string; // HH:MM
+}): number {
+  const extra = Math.max(0, args.watchActiveKcal - ENGINE.WATCH_BASELINE_ACTIVE_KCAL[args.lifestyle]);
+  return args.localTime < ENGINE.WATCH_SWITCH_TIME ? Math.max(args.plannedKcal, extra) : extra;
+}

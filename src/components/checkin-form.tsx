@@ -20,10 +20,18 @@ function toBucket(hours: number | null | undefined): SleepValue | null {
   return "8.5";
 }
 
-export function CheckinForm({ initial }: { initial: { sleep_hours: number | null; planned_activity: PlannedActivity } | null }) {
+export function CheckinForm({
+  initial,
+  watchSleepMinutes = null,
+}: {
+  initial: { sleep_hours: number | null; planned_activity: PlannedActivity } | null;
+  /** Last night's sleep from the watch, used to pre-fill the answer. */
+  watchSleepMinutes?: number | null;
+}) {
   const t = useT();
   const router = useRouter();
-  const [sleep, setSleep] = useState<SleepValue | null>(toBucket(initial?.sleep_hours));
+  const fromWatch = initial?.sleep_hours == null && watchSleepMinutes != null && watchSleepMinutes > 0;
+  const [sleep, setSleep] = useState<SleepValue | null>(toBucket(fromWatch ? watchSleepMinutes! / 60 : initial?.sleep_hours));
   const [activity, setActivity] = useState<PlannedActivity | null>(initial?.planned_activity ?? null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -32,6 +40,11 @@ export function CheckinForm({ initial }: { initial: { sleep_hours: number | null
     <main className="space-y-4 pt-2">
       <h1 className="board text-3xl">{t.checkin.title}</h1>
       <Panel as="form" className="space-y-6">
+        {fromWatch && (
+          <p className="-mb-3 text-sm font-semibold text-accent">
+            {t.watch.sleepFromWatch(Math.floor(watchSleepMinutes! / 60), watchSleepMinutes! % 60)}
+          </p>
+        )}
         <ChoiceGroup
           name="sleep"
           legend={t.checkin.sleepQ}
@@ -59,7 +72,9 @@ export function CheckinForm({ initial }: { initial: { sleep_hours: number | null
           disabled={!sleep || !activity || pending}
           onClick={() =>
             start(async () => {
-              const r = await saveCheckin({ sleep_hours: sleep ? Number(sleep) : null, planned_activity: activity! });
+              // Keep the watch's exact figure when the person kept the pre-filled answer.
+              const exact = fromWatch && toBucket(watchSleepMinutes! / 60) === sleep ? Math.round((watchSleepMinutes! / 60) * 10) / 10 : null;
+              const r = await saveCheckin({ sleep_hours: exact ?? (sleep ? Number(sleep) : null), planned_activity: activity! });
               if (r.ok) router.push("/");
               else setError(t.common.errorGeneric);
             })

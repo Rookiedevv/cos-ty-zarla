@@ -68,6 +68,15 @@ export function TodayView({ day, lang, timezone }: { day: DayState; lang: Lang; 
               </p>
             )}
 
+            {day.watch && (
+              <p className="text-sm text-ink-soft">
+                {t.today.watchLine(
+                  fmt(day.watch.steps ?? 0),
+                  fmt(day.watch.activeKcal ?? 0),
+                  t.today.ago(Math.max(0, Math.round((Date.parse(day.nowIso) - Date.parse(day.watch.updatedAt)) / 60000))),
+                )}
+              </p>
+            )}
             <p className="text-sm text-ink-soft">
               {target.maintenance ? t.today.maintenance : t.today.paceLine(dec(lang, target.expectedKgPerWeek))}
             </p>
@@ -90,7 +99,13 @@ export function TodayView({ day, lang, timezone }: { day: DayState; lang: Lang; 
               <div className="mt-2 space-y-1">
                 <Row label={t.today.breakdown.base} value={`${fmt(target.baseBurn)}`} />
                 <Row
-                  label={target.activitySource === "assumed_rest" ? t.today.breakdown.activityAssumed : t.today.breakdown.activity}
+                  label={
+                    target.activitySource === "watch"
+                      ? t.today.breakdown.activityWatch
+                      : target.activitySource === "assumed_rest"
+                        ? t.today.breakdown.activityAssumed
+                        : t.today.breakdown.activity
+                  }
                   value={`+${fmt(target.activityKcal)}`}
                 />
                 <Row label={t.today.breakdown.deficit} value={`−${fmt(target.deficit)}`} />
