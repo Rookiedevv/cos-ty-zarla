@@ -138,3 +138,23 @@ Vercel → project → **Settings → Environment Variables → Add**:
 Then **Deployments** → ⋯ on the top one → **Redeploy**.
 
 Optional: `AI_MODEL` switches the model later (e.g. `claude-sonnet-5-5` for better photo accuracy at ~20× the price).
+
+---
+
+# Watch sync (Galaxy Watch → Health Connect → app)
+
+## 1. Add the new tables
+Supabase → **SQL Editor → New query** → run `supabase/migrations/20261012000005_watch.sql`.
+
+## 2. Let Samsung Health share with Health Connect (on the phone)
+Samsung Health → **⋮ → Settings → Health Connect** → allow Samsung Health to write **Steps, Sleep, Active calories burned, Exercise**.
+
+## 3. Install the companion app
+App → **Settings → Zegarek → Połącz zegarek**. Note the 8-character code, then tap **Pobierz aplikację pomocniczą**.
+Open the downloaded `cos-ty-zarla-sync.apk`; allow your browser to install apps when Android asks.
+
+## 4. Connect
+Open **Żarła Sync**, type the code, tap **Połącz**, then **Allow** all health data, including **access in the background**.
+Tap **Synchronizuj teraz** to test. Settings → Zegarek should show "Ostatnia synchronizacja przed chwilą".
+
+Updates: every change to the companion app publishes a new download at the same link; installing it replaces the old version and keeps the connection.

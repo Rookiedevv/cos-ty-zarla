@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, ageOn, localDate, localTime } from "./engine/dates";
-import { activityFromWatch, computeTarget, waterTargetMl } from "./engine/target";
+import { activityFromWatch, computeTarget, waterTargetMl, watchActiveKcal } from "./engine/target";
 import { ENGINE } from "./engine/constants";
 import type { HistoryDay, PlannedActivity, TargetBreakdown } from "./engine/types";
 import { hhmm, insideWindow, isoWeekday, type Profile } from "./profile";
@@ -100,11 +100,12 @@ export async function loadDay(supabase: SupabaseClient, profile: Profile, date: 
   const weightKg = lastWeight?.kg ?? null;
   if (weightKg && profile.sex && profile.date_of_birth && profile.height_cm && profile.lifestyle) {
     const plannedKcal = checkin ? ENGINE.ACTIVITY_KCAL_PER_KG[checkin.planned_activity] * weightKg : 0;
+    const measured = watch ? watchActiveKcal(watch.activeKcal, watch.steps, weightKg) : null;
     const actualActiveKcal =
-      watch?.activeKcal != null
+      measured != null
         ? activityFromWatch({
             plannedKcal,
-            watchActiveKcal: watch.activeKcal,
+            watchActiveKcal: measured,
             lifestyle: profile.lifestyle,
             localTime: isToday ? nowLocal : "23:59",
           })

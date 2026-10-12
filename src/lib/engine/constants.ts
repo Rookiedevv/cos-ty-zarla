@@ -52,6 +52,8 @@ export const ENGINE = {
    * factor already counts. Only activity above this daily amount adds to the target.
    */
   WATCH_BASELINE_ACTIVE_KCAL: { sedentary: 300, on_feet: 500, physical: 700 },
+  /** Fallback when the watch sends steps but no active calories: kcal per step per kg of body weight. */
+  KCAL_PER_STEP_PER_KG: 0.0005,
   /** Until this local time the target uses the higher of plan and watch; after it, only what the watch measured. */
   WATCH_SWITCH_TIME: "18:00",
 

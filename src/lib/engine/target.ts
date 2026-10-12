@@ -188,3 +188,10 @@ export function activityFromWatch(args: {
   const extra = Math.max(0, args.watchActiveKcal - ENGINE.WATCH_BASELINE_ACTIVE_KCAL[args.lifestyle]);
   return args.localTime < ENGINE.WATCH_SWITCH_TIME ? Math.max(args.plannedKcal, extra) : extra;
 }
+
+/** Active kcal from the watch, or an estimate from steps when only steps arrived (~40 kcal per 1,000 steps at 80 kg). */
+export function watchActiveKcal(activeKcal: number | null, steps: number | null, weightKg: number): number | null {
+  if (activeKcal != null && activeKcal > 0) return activeKcal;
+  if (steps != null && steps > 0) return Math.round(steps * ENGINE.KCAL_PER_STEP_PER_KG * weightKg);
+  return activeKcal;
+}

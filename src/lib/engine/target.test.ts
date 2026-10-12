@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays, ageOn, dayBounds, localDate, zonedTimeToUtc } from "./dates";
-import { activityFromWatch, bmr, carryOverFor, computeTarget, floorKcal, waterTargetMl } from "./target";
+import { activityFromWatch, bmr, watchActiveKcal, carryOverFor, computeTarget, floorKcal, waterTargetMl } from "./target";
 import type { BodyProfile, HistoryDay } from "./types";
 
 const robert: BodyProfile = { sex: "male", ageYears: 35, heightCm: 180, weightKg: 100, lifestyle: "sedentary", pace: "auto" };
@@ -191,5 +191,14 @@ describe("activityFromWatch", () => {
   });
   it("uses a higher baseline for physical jobs", () => {
     expect(activityFromWatch({ plannedKcal: 0, lifestyle: "physical", watchActiveKcal: 900, localTime: "21:00" })).toBe(200);
+  });
+});
+
+describe("watchActiveKcal", () => {
+  it("prefers real active calories, else estimates from steps", () => {
+    expect(watchActiveKcal(450, 9000, 80)).toBe(450);
+    expect(watchActiveKcal(null, 10000, 80)).toBe(400);
+    expect(watchActiveKcal(0, 10000, 100)).toBe(500);
+    expect(watchActiveKcal(null, null, 80)).toBeNull();
   });
 });
