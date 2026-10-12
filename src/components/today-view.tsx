@@ -3,12 +3,14 @@ import { Notice, Panel, PanelTitle, dec, fmt } from "@/components/ui";
 import { MealList } from "@/components/meal-list";
 import { WaterPanel } from "@/components/water-panel";
 import { WorkoutList } from "@/components/workout-list";
+import { DietReminderCard } from "@/components/diet-reminder-card";
+import type { FoodFocus, Method } from "@/lib/engine/types";
 import { WeightQuick } from "@/components/weight-quick";
 import type { DayState } from "@/lib/day";
 import { getDict, type Lang } from "@/lib/i18n";
 
 /** The Today screen, separated from data loading so it can be rendered with any DayState. */
-export function TodayView({ day, lang, timezone }: { day: DayState; lang: Lang; timezone: string }) {
+export function TodayView({ day, lang, timezone, diet }: { day: DayState; lang: Lang; timezone: string; diet: { method: Method; focus: FoodFocus } }) {
   const t = getDict(lang);
   const date = day.date;
   const target = day.target;
@@ -120,6 +122,8 @@ export function TodayView({ day, lang, timezone }: { day: DayState; lang: Lang; 
           <WeightQuick />
         )}
       </Panel>
+
+      {day.checkin && <DietReminderCard method={diet.method} focus={diet.focus} lang={lang} />}
 
       {!day.hasWatch && day.checkin && (
         <Panel>

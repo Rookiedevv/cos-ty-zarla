@@ -74,7 +74,9 @@ function preview(s: State, pace: BodyProfile["pace"]) {
   return computeTarget({ today: "2000-01-01", profile: body, day: { sleepHours: 8, checkedIn: true, workoutKcal: 0 } });
 }
 
-export function PlanForm(props: { mode: "onboarding" | "settings"; profile: Profile; weightKg: number | null }) {
+export type PlanSection = "about" | "pace" | "diet" | "routine" | "water";
+
+export function PlanForm(props: { mode: "onboarding" | "settings"; profile: Profile; weightKg: number | null; only?: PlanSection[] }) {
   const [lang, setLang] = useState<Lang>(props.profile.language);
   return (
     <I18nProvider lang={lang}>
@@ -83,7 +85,7 @@ export function PlanForm(props: { mode: "onboarding" | "settings"; profile: Prof
   );
 }
 
-function PlanFormInner({ mode, profile, weightKg, onLang }: { mode: "onboarding" | "settings"; profile: Profile; weightKg: number | null; onLang: (l: Lang) => void }) {
+function PlanFormInner({ mode, profile, weightKg, onLang, only }: { mode: "onboarding" | "settings"; profile: Profile; weightKg: number | null; onLang: (l: Lang) => void; only?: PlanSection[] }) {
   const t = useT();
   const router = useRouter();
   const [s, setS] = useState<State>(() => initialState(profile, weightKg));
@@ -131,7 +133,7 @@ function PlanFormInner({ mode, profile, weightKg, onLang }: { mode: "onboarding"
   if (mode === "settings") {
     return (
       <div className="space-y-4">
-        {sections.map((sec) => (
+        {sections.filter((sec) => !only || only.includes(sec.key as PlanSection)).map((sec) => (
           <Panel key={sec.key}>
             <PanelTitle>{sec.title}</PanelTitle>
             {sec.body}
