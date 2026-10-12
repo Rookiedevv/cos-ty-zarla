@@ -23,7 +23,7 @@ export function AllowList({ emails, self }: { emails: string[]; self: string }) 
             {e !== self && (
               <button
                 type="button"
-                className="value text-sm text-ink-soft underline hover:text-kompot"
+                className="value -my-2 px-1 py-2.5 text-sm text-ink-soft underline hover:text-kompot"
                 disabled={pending}
                 onClick={() => start(async () => void (await removeAllowedEmail(e)))}
               >
@@ -34,7 +34,7 @@ export function AllowList({ emails, self }: { emails: string[]; self: string }) 
         ))}
       </ul>
       <form
-        className="flex gap-2"
+        className="flex flex-wrap gap-2"
         onSubmit={(ev) => {
           ev.preventDefault();
           start(async () => {
@@ -46,8 +46,8 @@ export function AllowList({ emails, self }: { emails: string[]; self: string }) 
           });
         }}
       >
-        <input type="email" required className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@gmail.com" aria-label={t.settings.addEmail} />
-        <Button type="submit" disabled={pending}>
+        <input type="email" required className={`${inputClass} min-w-48 flex-1`} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@gmail.com" aria-label={t.settings.addEmail} />
+        <Button type="submit" disabled={pending} className="whitespace-nowrap max-[359px]:w-full">
           {t.settings.addEmail}
         </Button>
       </form>

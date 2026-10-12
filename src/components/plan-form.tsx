@@ -9,6 +9,7 @@ import { computeTarget, waterTargetMl } from "@/lib/engine/target";
 import type { BodyProfile, FoodFocus, Lifestyle, Method, Sex } from "@/lib/engine/types";
 import { I18nProvider, useLang, useT } from "@/lib/i18n/client";
 import { hhmm, IF_PRESETS, type Profile } from "@/lib/profile";
+import { BirthDateInput } from "./birth-date-input";
 import { Button, ChoiceGroup, Field, Notice, Panel, PanelTitle, dec, fmt, inputClass } from "./ui";
 
 type Lang = "en" | "pl";
@@ -137,8 +138,8 @@ function PlanFormInner({ mode, profile, weightKg, onLang }: { mode: "onboarding"
           </Panel>
         ))}
         {error && <Notice tone="warn">{error}</Notice>}
-        <div className="sticky bottom-24 z-10">
-          <Button className="w-full shadow-[0_3px_0_0_var(--ink)]" disabled={pending || !sections.every((x) => x.valid)} onClick={submit}>
+        <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 -mx-4 border-t-2 border-grout bg-tile px-4 py-3">
+          <Button className="w-full" disabled={pending || !sections.every((x) => x.valid)} onClick={submit}>
             {pending ? t.common.saving : savedAt ? `${t.settings.saved} ✓` : t.common.save}
           </Button>
         </div>
@@ -230,10 +231,8 @@ function AboutYou({ s, set, showWeight }: SectionProps & { showWeight: boolean }
         onChange={(v) => set("sex", v)}
         choices={[{ value: "male", label: t.onboarding.male }, { value: "female", label: t.onboarding.female }]}
       />
-      <Field label={t.onboarding.dob}>
-        <input type="date" className={inputClass} value={s.date_of_birth} min="1930-01-01" max="2010-12-31" onChange={(e) => set("date_of_birth", e.target.value)} />
-      </Field>
-      <div className={`grid gap-3 ${showWeight ? "grid-cols-2" : ""}`}>
+      <BirthDateInput value={s.date_of_birth} onChange={(v) => set("date_of_birth", v)} />
+      <div className={`grid gap-3 ${showWeight ? "grid-cols-2" : ""} items-end`}>
         <Field label={t.onboarding.height}>
           <input className={inputClass} inputMode="numeric" value={s.height_cm} onChange={(e) => set("height_cm", e.target.value)} />
         </Field>
@@ -296,7 +295,7 @@ function PaceSection({ s, set }: SectionProps) {
         })}
       />
       <label className="flex items-center gap-3">
-        <input type="checkbox" className="size-5 accent-[var(--ink)]" checked={custom} onChange={(e) => {
+        <input type="checkbox" className="size-5 accent-[var(--accent)]" checked={custom} onChange={(e) => {
           setCustom(e.target.checked);
           if (e.target.checked && s.pace === "auto") set("pace", "0.008");
         }} />
@@ -306,7 +305,7 @@ function PaceSection({ s, set }: SectionProps) {
         <div className="space-y-1">
           <input
             type="range"
-            className="w-full accent-[var(--ink)]"
+            className="w-full accent-[var(--accent)]"
             min={0.0025}
             max={ENGINE.MAX_CUSTOM_PACE}
             step={0.0005}
@@ -364,7 +363,7 @@ function DietSection({ s, set }: SectionProps) {
             ]}
           />
           {s.if_preset === "custom" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
               <Field label={t.onboarding.windowStart}>
                 <input type="time" className={inputClass} value={s.window_start} onChange={(e) => set("window_start", e.target.value)} />
               </Field>
@@ -383,7 +382,7 @@ function DietSection({ s, set }: SectionProps) {
               const dow = i + 1;
               const on = s.low_days.includes(dow);
               return (
-                <label key={d} className={`cursor-pointer rounded-lg border-2 px-2 py-2 text-center text-sm font-semibold ${on ? "border-ink bg-ink text-enamel" : "border-grout bg-enamel"}`}>
+                <label key={d} className={`cursor-pointer rounded-lg border-2 px-2 py-2 text-center text-sm font-semibold ${on ? "border-accent bg-accent text-on-accent" : "border-grout bg-enamel"}`}>
                   <input
                     type="checkbox"
                     className="sr-only"
@@ -419,7 +418,7 @@ function RoutineSection({ s, set }: SectionProps) {
   const t = useT();
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
         <Field label={t.onboarding.wakeTime}>
           <input type="time" className={inputClass} value={s.wake_time} onChange={(e) => set("wake_time", e.target.value)} />
         </Field>
@@ -432,7 +431,7 @@ function RoutineSection({ s, set }: SectionProps) {
       <fieldset className="space-y-2">
         <legend className="font-semibold">{t.onboarding.weighInTitle}</legend>
         <p className="text-sm text-ink-soft">{t.onboarding.weighInHelp}</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
           <Field label={t.onboarding.weighInDay}>
             <select className={inputClass} value={s.weigh_in_dow} onChange={(e) => set("weigh_in_dow", Number(e.target.value))}>
               {t.weekdays.map((d, i) => (

@@ -46,7 +46,7 @@ export function LogMealForm({ today, showProtein }: { today: string; showProtein
           </Field>
           {showProtein && (
             <Field label={t.log.protein}>
-              <input className={inputClass} inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} />
+              <input className={inputClass} inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} placeholder={t.log.optional} />
             </Field>
           )}
         </div>
@@ -59,7 +59,7 @@ export function LogMealForm({ today, showProtein }: { today: string; showProtein
           choices={(["now", "m30", "h1", "h2", "h3", "custom"] as const).map((w) => ({ value: w, label: t.log.when[w] }))}
         />
         {when === "custom" && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
             <input type="date" className={inputClass} value={customDate} max={today} onChange={(e) => setCustomDate(e.target.value)} aria-label={t.log.when.custom} />
             <input type="time" className={inputClass} value={customTime} onChange={(e) => setCustomTime(e.target.value)} aria-label={t.log.when.custom} required />
           </div>

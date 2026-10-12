@@ -36,12 +36,12 @@ export function BottomNav() {
   };
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 border-t-2 border-ink bg-enamel pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed inset-x-0 bottom-0 z-20 border-t-2 border-grout bg-enamel pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto flex max-w-lg items-center px-2">
         {tab("/", t.nav.today, "today")}
         <Link
           href="/log"
-          className="-mt-6 mx-2 flex size-16 items-center justify-center rounded-full border-2 border-ink bg-kompot text-enamel shadow-[0_3px_0_0_var(--ink)]"
+          className="-mt-6 mx-2 flex size-16 items-center justify-center rounded-full border-2 border-outline bg-accent text-on-accent shadow-[var(--panel-shadow)]"
           aria-label={t.today.logMeal}
         >
           <svg aria-hidden viewBox="0 0 24 24" className="size-8" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round">

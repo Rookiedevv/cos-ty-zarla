@@ -3,7 +3,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 /** White enamel panel, like a menu board hung on the tiled wall. */
 export function Panel({ children, className = "", as: Tag = "section" }: { children: ReactNode; className?: string; as?: "section" | "div" | "form" }) {
   return (
-    <Tag className={`rounded-2xl border-2 border-ink/90 bg-enamel p-4 shadow-[0_3px_0_0_var(--ink)] ${className}`}>{children}</Tag>
+    <Tag className={`rounded-2xl panel-frame bg-enamel p-4 ${className}`}>{children}</Tag>
   );
 }
 
@@ -15,14 +15,14 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primar
 
 export function Button({ variant = "primary", className = "", ...props }: ButtonProps) {
   const styles = {
-    primary: "bg-ink text-enamel border-ink hover:opacity-90",
-    ghost: "bg-enamel text-ink border-ink hover:bg-tile",
+    primary: "bg-accent text-on-accent border-accent hover:opacity-90",
+    ghost: "bg-enamel text-ink border-outline hover:bg-tile",
     quiet: "bg-transparent text-ink-soft border-transparent underline underline-offset-4 hover:text-ink",
   }[variant];
   return (
     <button
       {...props}
-      className={`min-h-12 rounded-xl border-2 px-4 font-semibold disabled:opacity-50 ${styles} ${className}`}
+      className={`min-h-12 rounded-xl border-2 px-4 font-semibold disabled:cursor-not-allowed disabled:border-grout disabled:bg-grout disabled:text-ink-soft ${styles} ${className}`}
     />
   );
 }
@@ -38,7 +38,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 }
 
 export const inputClass =
-  "w-full min-h-12 rounded-xl border-2 border-grout bg-enamel px-3 py-2 text-lg focus:border-ink outline-none";
+  "w-full min-h-12 rounded-xl border-2 border-grout bg-enamel px-3 py-2 text-lg focus:border-accent outline-none";
 
 export interface Choice<V extends string> {
   value: V;
@@ -62,19 +62,27 @@ export function ChoiceGroup<V extends string>({
   onChange: (v: V) => void;
   columns?: 1 | 2 | 3 | 5;
 }) {
-  const cols = { 1: "grid-cols-1", 2: "grid-cols-2", 3: "grid-cols-3", 5: "grid-cols-5" }[columns];
+  // Literal class names so Tailwind can see them. Multi-column grids fall back to one column on very narrow phones.
+  const cols = {
+    1: "grid-cols-1",
+    2: "grid-cols-1 min-[360px]:grid-cols-2",
+    3: "grid-cols-1 min-[360px]:grid-cols-3",
+    5: "grid-cols-1 min-[360px]:grid-cols-5",
+  }[columns];
+  // Short options (no description) wrap as pills sized to their text, so labels never break mid-word.
+  const pills = choices.every((c) => !c.desc);
   return (
     <fieldset>
       {legend && <legend className="mb-2 font-semibold">{legend}</legend>}
-      <div className={`grid gap-2 ${cols}`}>
+      <div className={pills ? "flex flex-wrap gap-2" : `grid gap-2 ${cols}`}>
         {choices.map((c) => {
           const checked = value === c.value;
           return (
             <label
               key={c.value}
-              className={`cursor-pointer rounded-xl border-2 px-3 py-2.5 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-[var(--focus)] ${
-                checked ? "border-ink bg-ink text-enamel" : "border-grout bg-enamel hover:border-ink"
-              }`}
+              className={`cursor-pointer rounded-xl border-2 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-[var(--focus)] ${
+                pills ? "flex min-h-12 flex-1 basis-auto items-center justify-center whitespace-nowrap px-4 text-center" : "px-3 py-2.5"
+              } ${checked ? "border-accent bg-accent text-on-accent" : "border-grout bg-enamel hover:border-outline"}`}
             >
               <input
                 type="radio"

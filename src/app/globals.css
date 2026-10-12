@@ -2,38 +2,28 @@
 @import "@fontsource-variable/bricolage-grotesque/standard.css";
 
 /*
-  Look: a Polish milk bar (bar mleczny). Pale mint wall tiles, white enamel,
-  bottle-green menu-board ink, kompot red for "over", mustard for fasting.
-  Meals read like a price list on the wall: name, dotted leader, kcal.
+  Dark-first look. Meals read like a menu board: name, dotted leader, kcal.
+  Token names (tile, enamel, kompot…) come from the first milk-bar palette.
 */
 :root {
-  --tile: #dcebe3;
-  --enamel: #fbfdfb;
-  --ink: #1f3b33;
-  --ink-soft: #4f6b62;
-  --grout: #b9d1c6;
-  --kompot: #b8302a;
-  --mustard: #b97f0f;
-  --mustard-bg: #f6e7c4;
-  --water: #2f6fa8;
-  --water-bg: #d4e5f3;
-  --focus: #2f6fa8;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --tile: #12241e;
-    --enamel: #1a3029;
-    --ink: #e4f0ea;
-    --ink-soft: #9db8ae;
-    --grout: #2c4a40;
-    --kompot: #ef6a5f;
-    --mustard: #e6ae3a;
-    --mustard-bg: #3a3218;
-    --water: #7cb2e2;
-    --water-bg: #1d3448;
-    --focus: #7cb2e2;
-  }
+  /* Dark-first palette: charcoal surfaces, lime accent, coral for "over", amber for fasting. */
+  color-scheme: dark;
+  --tile: #111316;        /* page background */
+  --enamel: #1b1e23;      /* cards */
+  --ink: #f1f3f6;         /* main text */
+  --ink-soft: #9aa3ae;    /* secondary text */
+  --grout: #2b3038;       /* hairlines, quiet borders */
+  --kompot: #ff6b5e;      /* over target, errors */
+  --mustard: #f5b83d;     /* fasting, attention */
+  --mustard-bg: #3a2e12;
+  --water: #4cc3f5;
+  --water-bg: #0f2a38;
+  --focus: #b4f04a;
+  --accent: #b4f04a;      /* primary actions, progress */
+  --on-accent: #111316;
+  --outline: #3a4049;     /* secondary button borders */
+  --panel-border: #2b3038;
+  --panel-shadow: none;
 }
 
 @theme inline {
@@ -47,6 +37,9 @@
   --color-mustard-bg: var(--mustard-bg);
   --color-water: var(--water);
   --color-water-bg: var(--water-bg);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-outline: var(--outline);
   --font-sans: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -58,19 +51,15 @@ html {
 
 body {
   background: var(--tile);
-  /* Faint wall tiles. */
-  background-image:
-    linear-gradient(var(--grout) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grout) 1px, transparent 1px);
-  background-size: 44px 44px;
-  background-attachment: fixed;
   font-family: var(--font-sans);
   line-height: 1.45;
 }
 
-@media (prefers-color-scheme: dark) {
-  body { background-image: linear-gradient(color-mix(in srgb, var(--grout) 45%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--grout) 45%, transparent) 1px, transparent 1px); }
+
+/* Card frame: border + shadow come from the palette. */
+.panel-frame {
+  border: 2px solid var(--panel-border);
+  box-shadow: var(--panel-shadow);
 }
 
 /* Condensed board lettering for the big numbers and headings. */

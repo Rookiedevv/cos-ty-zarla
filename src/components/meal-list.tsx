@@ -31,7 +31,7 @@ export function MealList({ meals, timezone, showEmpty = true }: { meals: Meal[];
             <button
               type="button"
               disabled={pending}
-              className="text-ink-soft underline underline-offset-2 hover:text-kompot"
+              className="-my-2 px-1 py-2 text-ink-soft underline underline-offset-2 hover:text-kompot"
               onClick={() => {
                 if (confirm(t.log.deleteConfirm)) start(async () => void (await deleteMeal(m.id)));
               }}

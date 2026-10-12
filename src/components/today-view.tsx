@@ -28,7 +28,7 @@ export function TodayView({ day, lang, timezone }: { day: DayState; lang: Lang; 
       {!day.checkin && (
         <Link
           href="/checkin"
-          className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border-2 border-ink bg-mustard-bg px-4 py-3 shadow-[0_3px_0_0_var(--ink)]"
+          className="flex min-h-14 items-center justify-between gap-3 rounded-2xl panel-frame bg-mustard-bg px-4 py-3"
         >
           <span>
             <span className="block font-semibold">{t.today.checkinCta}</span>
@@ -116,7 +116,7 @@ export function TodayView({ day, lang, timezone }: { day: DayState; lang: Lang; 
         <MealList meals={day.meals} timezone={timezone} />
         <Link
           href="/log"
-          className="mt-3 flex min-h-12 items-center justify-center rounded-xl border-2 border-ink font-semibold hover:bg-tile"
+          className="mt-3 flex min-h-12 items-center justify-center rounded-xl border-2 border-outline font-semibold hover:bg-tile"
         >
           {t.today.logMeal}
         </Link>
@@ -137,8 +137,8 @@ function Meter({ value, max }: { value: number; max: number }) {
   const pct = Math.min(100, (value / max) * 100);
   const over = value > max;
   return (
-    <div className="h-3 overflow-hidden rounded-full border-2 border-ink bg-tile" role="presentation">
-      <div className={`h-full ${over ? "bg-kompot" : "bg-ink"}`} style={{ width: `${pct}%` }} />
+    <div className="h-3 overflow-hidden rounded-full border-2 border-outline bg-tile" role="presentation">
+      <div className={`h-full ${over ? "bg-kompot" : "bg-accent"}`} style={{ width: `${pct}%` }} />
     </div>
   );
 }
