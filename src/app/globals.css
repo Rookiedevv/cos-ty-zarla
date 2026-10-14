@@ -15,6 +15,7 @@
   --ink-soft: #5f6b7a;    /* secondary text */
   --grout: #e3e6eb;       /* hairlines, quiet borders */
   --kompot: #d92d20;      /* over target, errors */
+  --good: #15803d;        /* within target */
   --mustard: #b54708;     /* fasting, attention */
   --mustard-bg: #fef0c7;
   --water: #0e7490;
@@ -36,7 +37,8 @@
     --ink: #f1f3f6;
     --ink-soft: #9aa3ae;
     --grout: #2b3038;
-    --kompot: #ff6b5e;
+    --kompot: #e5675b;
+    --good: #127838;
     --mustard: #f5b83d;
     --mustard-bg: #3a2e12;
     --water: #4cc3f5;
@@ -57,6 +59,7 @@
   --color-ink-soft: var(--ink-soft);
   --color-grout: var(--grout);
   --color-kompot: var(--kompot);
+  --color-good: var(--good);
   --color-mustard: var(--mustard);
   --color-mustard-bg: var(--mustard-bg);
   --color-water: var(--water);

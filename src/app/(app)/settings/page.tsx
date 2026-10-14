@@ -43,7 +43,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         ))}
       </nav>
 
-      {tab === "diet" ? <DietTab profile={profile} weightKg={last?.kg ?? null} /> : <AccountTab supabase={supabase} profile={profile} last={last} />}
+      {tab === "diet" ? <DietTab profile={profile} last={last} /> : <AccountTab supabase={supabase} profile={profile} />}
     </main>
   );
 }
@@ -65,7 +65,8 @@ function GuideRow({ href, name, summary, current, currentLabel }: { href: string
   );
 }
 
-function DietTab({ profile, weightKg }: { profile: Ctx["profile"]; weightKg: number | null }) {
+/** Everything about you and your diet: weight, profile, routine, pace, method, water, cheatsheets. */
+function DietTab({ profile, last }: { profile: Ctx["profile"]; last: { kg: number; date: string } | null }) {
   const t = getDict(profile.language);
   const g = t.guide;
   const methods = Object.keys(METHOD_SHEETS) as Method[];
@@ -73,7 +74,10 @@ function DietTab({ profile, weightKg }: { profile: Ctx["profile"]; weightKg: num
 
   return (
     <>
-      <PlanForm mode="settings" profile={profile} weightKg={weightKg} only={["pace", "diet", "water"]} />
+      <Panel>
+        <WeightQuick last={last} />
+      </Panel>
+      <PlanForm mode="settings" profile={profile} weightKg={last?.kg ?? null} />
       <Panel>
         <PanelTitle>{g.all}</PanelTitle>
         <h3 className="mt-1 text-sm font-semibold text-ink-soft">{g.method}</h3>
@@ -107,7 +111,8 @@ function DietTab({ profile, weightKg }: { profile: Ctx["profile"]; weightKg: num
   );
 }
 
-async function AccountTab({ supabase, profile, last }: Ctx & { last: { kg: number; date: string } | null }) {
+/** The app itself: reminders, watch, AI costs, access, sign out. */
+async function AccountTab({ supabase, profile }: Ctx) {
   const t = getDict(profile.language);
   const { data: deviceRows } = await supabase
     .from("device_tokens")
@@ -130,10 +135,6 @@ async function AccountTab({ supabase, profile, last }: Ctx & { last: { kg: numbe
 
   return (
     <>
-      <Panel>
-        <WeightQuick last={last} />
-      </Panel>
-      <PlanForm mode="settings" profile={profile} weightKg={last?.kg ?? null} only={["about", "routine"]} />
       <NotificationSettings prefs={profile.notification_prefs ?? {}} />
       <WatchSettings devices={devices} nowIso={new Date().toISOString()} />
       {profile.is_admin && <AiCosts rows={costRows} selfId={profile.id} lang={profile.language} />}

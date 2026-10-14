@@ -568,3 +568,12 @@ export async function disconnectDevice(id: string): Promise<ActionResult> {
   revalidatePath("/settings");
   return { ok: true };
 }
+
+export async function deleteWeight(date: string): Promise<ActionResult> {
+  const { supabase, profile } = await requireUser();
+  if (!z.iso.date().safeParse(date).success) return fail("invalid");
+  const { error } = await supabase.from("weights").delete().eq("user_id", profile.id).eq("date", date);
+  if (error) return fail(error.message);
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
