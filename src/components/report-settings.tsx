@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { approveFollow, removeFollow, requestFollow, saveEmailPrefs } from "@/app/actions";
+import { approveFollow, removeFollow, requestFollow, saveEmailPrefs, sendTestReportAction } from "@/app/actions";
 import { useT } from "@/lib/i18n/client";
 import type { EmailPrefKey } from "@/lib/profile";
 import { Button, Notice, Panel, PanelTitle } from "./ui";
@@ -34,7 +34,18 @@ export function EmailReportSettings({ prefs, configured }: { prefs: Partial<Reco
   const t = useT().reports;
   const [values, setValues] = useState(() => Object.fromEntries(KEYS.map((k) => [k, prefs[k] !== false])) as Record<EmailPrefKey, boolean>);
   const [, start] = useTransition();
+  const [testing, startTest] = useTransition();
+  const [result, setResult] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
   const label = { daily: t.emailDaily, weekly: t.emailWeekly, friend: t.emailFriend };
+  const sendTest = () =>
+    startTest(async () => {
+      setResult(null);
+      const r = await sendTestReportAction();
+      if (r.ok) setResult({ tone: "info", text: t.testSent(r.to) });
+      else if (r.error === "not_configured") setResult({ tone: "warn", text: t.testNotSetup });
+      else if (/auth|535|534|credentials|password/i.test(r.error)) setResult({ tone: "warn", text: t.testAuth });
+      else setResult({ tone: "warn", text: t.testFailed(r.error) });
+    });
 
   return (
     <Panel>
@@ -61,6 +72,14 @@ export function EmailReportSettings({ prefs, configured }: { prefs: Partial<Reco
           </li>
         ))}
       </ul>
+      {configured && (
+        <div className="space-y-2 border-t border-grout pt-3">
+          <Button variant="ghost" className="w-full" disabled={testing} onClick={sendTest}>
+            {testing ? t.testSending : t.testSend}
+          </Button>
+          {result && <Notice tone={result.tone}>{result.text}</Notice>}
+        </div>
+      )}
     </Panel>
   );
 }

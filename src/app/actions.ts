@@ -646,3 +646,22 @@ export async function removeFollow(followerId: string, followeeId: string): Prom
   revalidatePath("/settings");
   return { ok: true };
 }
+
+/** Emails a test daily + weekly report to the signed-in person right now. */
+export async function sendTestReportAction(): Promise<{ ok: true; to: string } | { ok: false; error: string }> {
+  const { profile } = await requireOnboardedUserForAction();
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { sendTestReports } = await import("@/lib/reports/run");
+  try {
+    return await sendTestReports(createAdminClient(), profile, new Date());
+  } catch (e) {
+    console.error("test report failed", e);
+    return { ok: false, error: e instanceof Error ? e.message.slice(0, 300) : "failed" };
+  }
+}
+
+async function requireOnboardedUserForAction() {
+  const ctx = await requireUser();
+  if (!ctx.profile.onboarded_at) throw new Error("not onboarded");
+  return ctx;
+}

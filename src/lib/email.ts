@@ -26,18 +26,24 @@ export function emailConfigured(): boolean {
  * so a failed email never breaks the job that sent it.
  */
 export async function sendEmail(msg: Msg): Promise<boolean> {
+  return (await sendEmailDetailed(msg)).ok;
+}
+
+/** Like sendEmail, but says why it failed (for the test button). */
+export async function sendEmailDetailed(msg: Msg): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const p = provider();
-    if (p === "gmail") return await viaGmail(msg);
-    if (p === "brevo") return await viaBrevo(msg);
-    return false;
+    if (p === "gmail") await viaGmail(msg);
+    else if (p === "brevo") await viaBrevo(msg);
+    else return { ok: false, error: "not_configured" };
+    return { ok: true };
   } catch (e) {
     console.error("email failed", e);
-    return false;
+    return { ok: false, error: e instanceof Error ? e.message.slice(0, 300) : String(e) };
   }
 }
 
-async function viaGmail(msg: Msg): Promise<boolean> {
+async function viaGmail(msg: Msg): Promise<void> {
   const { createTransport } = await import("nodemailer");
   const user = process.env.GMAIL_USER!;
   const transport = createTransport({
@@ -49,10 +55,9 @@ async function viaGmail(msg: Msg): Promise<boolean> {
     socketTimeout: 15_000,
   });
   await transport.sendMail({ from: { name: fromName(), address: user }, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text });
-  return true;
 }
 
-async function viaBrevo(msg: Msg): Promise<boolean> {
+async function viaBrevo(msg: Msg): Promise<void> {
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: { "api-key": process.env.BREVO_API_KEY!, "Content-Type": "application/json", Accept: "application/json" },
@@ -65,9 +70,5 @@ async function viaBrevo(msg: Msg): Promise<boolean> {
     }),
     signal: AbortSignal.timeout(10_000),
   });
-  if (!res.ok) {
-    console.error("email failed", res.status, (await res.text()).slice(0, 300));
-    return false;
-  }
-  return true;
+  if (!res.ok) throw new Error(`Brevo ${res.status}: ${(await res.text()).slice(0, 200)}`);
 }

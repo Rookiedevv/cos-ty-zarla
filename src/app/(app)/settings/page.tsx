@@ -16,6 +16,9 @@ import { displayName } from "@/lib/reports/run";
 import { requireOnboardedUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+// Room for the test-report button: two AI calls and two emails.
+export const maxDuration = 60;
+
 type Tab = "diet" | "account";
 type Ctx = Awaited<ReturnType<typeof requireOnboardedUser>>;
 
