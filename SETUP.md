@@ -163,3 +163,32 @@ Updates: every change to the companion app publishes a new download at the same 
 
 # Workouts and watch-only burn
 Supabase → **SQL Editor** → run `supabase/migrations/20261012000006_workouts.sql`.
+
+---
+
+# Daily and weekly reports
+
+## 1. Add the new tables
+Supabase → **SQL Editor → New query** → run `supabase/migrations/20261014000007_reports.sql`.
+
+## 2. Set up sending (pick one)
+
+**Gmail (recommended, because both of you read mail in Gmail)**
+1. Use the Google account that should send the reports (your own, or a new one just for the app).
+2. Turn on 2-Step Verification: myaccount.google.com → Security.
+3. Open myaccount.google.com/apppasswords, name it `cos-ty-zarla`, and click **Create**. Copy the 16-letter password.
+4. Vercel → project → **Settings → Environment Variables** → add:
+   - `GMAIL_USER` = that Gmail address
+   - `GMAIL_APP_PASSWORD` = the 16-letter password (secret: never paste it anywhere else)
+5. **Deployments → ⋮ → Redeploy**.
+
+**Brevo (alternative)**
+Sign up at brevo.com → Settings → Senders → add and verify your sender address → SMTP & API → API keys → generate.
+In Vercel add `BREVO_API_KEY` and `EMAIL_FROM` (the verified address), then redeploy.
+Note: Brevo can't authenticate a gmail.com sender, so mail to Gmail inboxes may land in spam.
+
+Optional: `EMAIL_FROM_NAME` (default "Coś ty żarła").
+
+## 3. Check
+Settings → Dieta → **Raporty e-mail** no longer shows "not set up". The first daily report arrives the morning after a day with entries;
+the weekly one right after the weigh-in on your weigh-in day (or at 21:00 without it). All reports also appear in Historia → Raporty.

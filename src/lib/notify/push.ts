@@ -10,7 +10,7 @@ interface VapidKeys {
 let cached: VapidKeys | null = null;
 
 /** The app's public address, used as the contact in push signatures. */
-function siteUrl() {
+export function siteUrl() {
   const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   return host ? `https://${host}` : "https://cos-ty-zarla.vercel.app";
 }

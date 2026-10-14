@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { localDate, zonedTimeToUtc } from "@/lib/engine/dates";
@@ -432,6 +433,18 @@ export async function saveWeight(kg: number): Promise<ActionResult> {
   const date = localDate(new Date(), profile.timezone);
   const { error } = await supabase.from("weights").upsert({ user_id: profile.id, date, kg: Math.round(kg * 10) / 10 });
   if (error) return fail(error.message);
+  // On the weigh-in day, the weekly report goes out right away (the 5-minute job is the backup).
+  if (profile.onboarded_at) {
+    after(async () => {
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const { runWeeklyReport } = await import("@/lib/reports/run");
+      try {
+        await runWeeklyReport(createAdminClient(), profile, new Date());
+      } catch (e) {
+        console.error("weekly report after weigh-in failed", e);
+      }
+    });
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -575,5 +588,61 @@ export async function deleteWeight(date: string): Promise<ActionResult> {
   const { error } = await supabase.from("weights").delete().eq("user_id", profile.id).eq("date", date);
   if (error) return fail(error.message);
   revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// ───────────────────────── Reports: emails and following ─────────────────────────
+
+const emailPrefsSchema = z.object({ daily: z.boolean(), weekly: z.boolean(), friend: z.boolean() }).partial();
+
+export async function saveEmailPrefs(prefs: z.input<typeof emailPrefsSchema>): Promise<ActionResult> {
+  const { supabase, profile } = await requireUser();
+  const parsed = emailPrefsSchema.safeParse(prefs);
+  if (!parsed.success) return fail("invalid");
+  const { error } = await supabase.from("profiles").update({ email_prefs: { ...(profile.email_prefs ?? {}), ...parsed.data } }).eq("id", profile.id);
+  if (error) return fail(error.message);
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/** Asks to follow someone's weekly progress; they get a phone notification to approve. */
+export async function requestFollow(followeeId: string): Promise<ActionResult> {
+  const { supabase, profile } = await requireUser();
+  if (!z.uuid().safeParse(followeeId).success || followeeId === profile.id) return fail("invalid");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  const { data: target } = await admin.from("profiles").select("id, language").eq("id", followeeId).not("onboarded_at", "is", null).maybeSingle();
+  if (!target) return fail("invalid");
+  const { error } = await supabase.from("follows").insert({ follower_id: profile.id, followee_id: followeeId });
+  if (error) return fail(error.code === "23505" ? "exists" : error.message);
+
+  const { sendPush } = await import("@/lib/notify/push");
+  const { getDict } = await import("@/lib/i18n");
+  const { displayName } = await import("@/lib/reports/run");
+  const t = getDict(target.language as string).reports;
+  const { data: subs } = await admin.from("push_subscriptions").select("id, endpoint, p256dh, auth").eq("user_id", followeeId);
+  for (const sub of subs ?? []) {
+    await sendPush(admin, sub, { title: t.followRequestTitle, body: t.followRequestBody(displayName(profile)), url: "/settings?tab=diet#follow", tag: "follow" });
+  }
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+export async function approveFollow(followerId: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!z.uuid().safeParse(followerId).success) return fail("invalid");
+  const { error } = await supabase.rpc("approve_follow", { p_follower: followerId });
+  if (error) return fail(error.message);
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/** Ends a follow from either side: cancel a request, stop following, decline or remove a follower. */
+export async function removeFollow(followerId: string, followeeId: string): Promise<ActionResult> {
+  const { supabase, profile } = await requireUser();
+  if (followerId !== profile.id && followeeId !== profile.id) return fail("forbidden");
+  const { error } = await supabase.from("follows").delete().eq("follower_id", followerId).eq("followee_id", followeeId);
+  if (error) return fail(error.message);
+  revalidatePath("/settings");
   return { ok: true };
 }

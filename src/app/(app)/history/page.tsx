@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MealList } from "@/components/meal-list";
+import { DailyReportView, WeeklyReportView, signedKg } from "@/components/report-view";
 import { Panel, fmt } from "@/components/ui";
 import { WeightHistory } from "@/components/weight-history";
 import type { WeightPoint } from "@/components/weight-chart";
@@ -7,20 +8,25 @@ import type { Meal } from "@/lib/day";
 import { MEAL_COLUMNS, todayFor } from "@/lib/day";
 import { addDays } from "@/lib/engine/dates";
 import { getDict } from "@/lib/i18n";
+import type { DailyAi, WeeklyAi } from "@/lib/reports/ai";
+import type { DailyData, WeeklyData } from "@/lib/reports/build";
+import { dateLabel, rangeLabel } from "@/lib/reports/email";
 import { requireOnboardedUser } from "@/lib/session";
 
-type Tab = "meals" | "weight";
+type Tab = "meals" | "weight" | "reports";
+const TABS: Tab[] = ["meals", "weight", "reports"];
 
 export default async function HistoryPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { supabase, profile } = await requireOnboardedUser();
-  const tab: Tab = (await searchParams).tab === "weight" ? "weight" : "meals";
+  const asked = (await searchParams).tab as Tab;
+  const tab: Tab = TABS.includes(asked) ? asked : "meals";
   const t = getDict(profile.language);
 
   return (
     <main className="space-y-4 pt-2">
       <h1 className="board text-3xl">{t.history.title}</h1>
-      <nav aria-label={t.history.title} className="grid grid-cols-2 gap-1 rounded-2xl bg-grout p-1">
-        {(["meals", "weight"] as const).map((key) => (
+      <nav aria-label={t.history.title} className="grid grid-cols-3 gap-1 rounded-2xl bg-grout p-1">
+        {TABS.map((key) => (
           <Link
             key={key}
             href={`/history?tab=${key}`}
@@ -29,11 +35,13 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
               tab === key ? "bg-enamel text-ink shadow-[var(--panel-shadow)]" : "text-ink-soft hover:text-ink"
             }`}
           >
-            {key === "meals" ? t.history.tabMeals : t.history.tabWeight}
+            {{ meals: t.history.tabMeals, weight: t.history.tabWeight, reports: t.history.tabReports }[key]}
           </Link>
         ))}
       </nav>
-      {tab === "meals" ? <MealsTab supabase={supabase} profile={profile} /> : <WeightTab supabase={supabase} profile={profile} />}
+      {tab === "meals" && <MealsTab supabase={supabase} profile={profile} />}
+      {tab === "weight" && <WeightTab supabase={supabase} profile={profile} />}
+      {tab === "reports" && <ReportsTab supabase={supabase} profile={profile} />}
     </main>
   );
 }
@@ -112,6 +120,77 @@ async function MealsTab({ supabase, profile }: Ctx) {
             </summary>
             <div className="mt-3 border-t border-grout pt-3">
               {dayMeals.length ? <MealList meals={dayMeals} timezone={profile.timezone} /> : <p className="text-sm text-ink-soft">{t.history.noMeals}</p>}
+            </div>
+          </details>
+        );
+      })}
+    </Panel>
+  );
+}
+
+/** Every daily and weekly report, newest first; open one to read it. */
+async function ReportsTab({ supabase, profile }: Ctx) {
+  const lang = profile.language;
+  const t = getDict(lang);
+  const r = t.reports;
+  const { data } = await supabase
+    .from("reports")
+    .select("id, kind, period_start, period_end, data, ai")
+    .eq("user_id", profile.id)
+    .order("period_end", { ascending: false })
+    .order("kind", { ascending: false })
+    .limit(60);
+
+  if (!data?.length) {
+    return (
+      <Panel>
+        <p className="text-ink-soft">{r.empty}</p>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel as="div" className="divide-y divide-grout p-0">
+      {data.map((row) => {
+        const weekly = row.kind === "weekly";
+        const d = row.data as DailyData;
+        const w = row.data as WeeklyData;
+        const dot = weekly ? "bg-accent" : d.diff == null ? "bg-grout" : d.diff > 0 ? "bg-kompot" : "bg-good";
+        const line = weekly
+          ? w.weight.kg != null
+            ? `${w.weight.kg.toLocaleString(lang === "en" ? "en-GB" : "pl-PL")} kg${w.weight.changeWeek != null ? ` (${signedKg(lang, w.weight.changeWeek)})` : ""} · ${r.daysOnTarget(w.daysOnTarget, w.daysWithTarget)}`
+            : `${r.noWeighIn} · ${r.daysOnTarget(w.daysOnTarget, w.daysWithTarget)}`
+          : d.diff == null
+            ? r.noTarget
+            : d.diff > 0
+              ? r.over(fmt(d.diff))
+              : r.under(fmt(-d.diff));
+        return (
+          <details key={row.id} className="group px-4 py-3">
+            <summary className="flex cursor-pointer list-none items-center gap-3">
+              <span aria-hidden className={`size-3 shrink-0 rounded-full ${dot}`} />
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold first-letter:uppercase">
+                  {weekly ? `${r.weekly} · ${rangeLabel(lang, row.period_start as string, row.period_end as string)}` : dateLabel(lang, row.period_end as string)}
+                </span>
+                <span className="block text-sm text-ink-soft">{line}</span>
+              </span>
+              {!weekly && (
+                <span className="shrink-0 text-right tabular-nums">
+                  <span className="board block text-xl">{fmt(d.eaten)}</span>
+                  <span className="block text-xs text-ink-soft">{d.target != null ? `/ ${fmt(d.target)} ${t.common.kcal}` : t.common.kcal}</span>
+                </span>
+              )}
+              <svg aria-hidden viewBox="0 0 24 24" className="size-5 shrink-0 text-ink-soft transition-transform group-open:rotate-180" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </summary>
+            <div className="mt-3 border-t border-grout pt-3">
+              {weekly ? (
+                <WeeklyReportView lang={lang} data={w} ai={row.ai as WeeklyAi | null} />
+              ) : (
+                <DailyReportView lang={lang} data={d} ai={row.ai as DailyAi | null} />
+              )}
             </div>
           </details>
         );

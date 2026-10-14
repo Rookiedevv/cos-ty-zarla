@@ -8,7 +8,7 @@ export const PREF_KEYS: PrefKey[] = ["checkin", "window", "remaining", "water", 
 export type Kind =
   | "checkin_1" | "checkin_2" | "checkin_3"
   | "window_open" | "window_closing"
-  | "remaining" | "water" | "weighin";
+  | "remaining" | "water" | "weighin" | "weighin_2";
 
 export interface UserNotifyState {
   language: "en" | "pl";
@@ -43,6 +43,8 @@ export interface Due {
 export const SEND_WINDOW_MIN = 15;
 
 const WATER_CHECK = "15:00";
+/** Second weigh-in nudge; the weekly report goes out anyway at 21:00. */
+const WEIGHIN_AGAIN = "17:00";
 const CHECKIN_REPEATS = ["12:00", "16:00"];
 
 /** Whether `now` falls in [at, at + SEND_WINDOW_MIN) on the same day. */
@@ -102,6 +104,7 @@ export function dueNotifications(u: UserNotifyState): Due[] {
   // Weekly weigh-in.
   if (on("weighin") && u.localWeekday === u.weighInDow) {
     add("weighin", hhmm(u.weighInTime), !u.hasWeightToday, t.weighinTitle, t.weighinBody, "/settings");
+    add("weighin_2", WEIGHIN_AGAIN, !u.hasWeightToday && minutesOf(WEIGHIN_AGAIN) > minutesOf(hhmm(u.weighInTime)), t.weighinTitle, t.weighinAgain, "/settings");
   }
 
   return out;

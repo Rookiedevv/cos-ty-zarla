@@ -4,6 +4,7 @@ import { localDate, localTime } from "@/lib/engine/dates";
 import { dueNotifications } from "@/lib/notify/rules";
 import { sendPush, type StoredSubscription } from "@/lib/notify/push";
 import { isoWeekday, type Profile } from "@/lib/profile";
+import { runReports } from "@/lib/reports/run";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -25,12 +26,13 @@ export async function POST(request: NextRequest) {
   const { data: subs } = await admin.from("push_subscriptions").select("id, user_id, endpoint, p256dh, auth");
   const byUser = new Map<string, StoredSubscription[]>();
   for (const s of subs ?? []) byUser.set(s.user_id as string, [...(byUser.get(s.user_id as string) ?? []), s as StoredSubscription]);
-  if (byUser.size === 0) return NextResponse.json({ users: 0, sent: 0, photosRemoved: await removeOldPhotos(admin, now) });
 
-  const { data: profiles } = await admin.from("profiles").select("*").in("id", [...byUser.keys()]).not("onboarded_at", "is", null);
+  // Everyone who finished onboarding gets reports; reminders only go to people with a device.
+  const { data: allProfiles } = await admin.from("profiles").select("*").not("onboarded_at", "is", null);
+  const profiles = ((allProfiles ?? []) as Profile[]).filter((p) => byUser.has(p.id));
 
-  const summary: { user: string; sent: string[] }[] = [];
-  for (const profile of (profiles ?? []) as Profile[]) {
+  const summary: { user: string; sent: string[]; reports?: string[] }[] = [];
+  for (const profile of profiles) {
     try {
       const date = localDate(now, profile.timezone);
       const day = await loadDay(admin, profile, date, now);
@@ -73,8 +75,12 @@ export async function POST(request: NextRequest) {
       summary.push({ user: profile.id.slice(0, 8), sent: ["error"] });
     }
   }
+
+  const reports = await Promise.all(
+    ((allProfiles ?? []) as Profile[]).map(async (p) => ({ user: p.id.slice(0, 8), reports: await runReports(admin, p, now) })),
+  );
   const photosRemoved = await removeOldPhotos(admin, now);
-  return NextResponse.json({ at: now.toISOString(), summary, photosRemoved });
+  return NextResponse.json({ at: now.toISOString(), summary, reports, photosRemoved });
 }
 
 /** Meal photos are kept 90 days; the meal, its description and items stay forever (SPEC §7.3). */

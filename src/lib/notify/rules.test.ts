@@ -78,6 +78,12 @@ describe("dueNotifications", () => {
     expect(kinds({ localWeekday: 2, localTime: "07:30" })).toEqual([]);
   });
 
+  it("nudges again in the afternoon if the weight is still missing", () => {
+    expect(kinds({ localWeekday: 1, localTime: "17:05" })).toContain("weighin_2");
+    expect(kinds({ localWeekday: 1, localTime: "17:05", hasWeightToday: true })).not.toContain("weighin_2");
+    expect(kinds({ localWeekday: 2, localTime: "17:05" })).not.toContain("weighin_2");
+  });
+
   it("never sends the same reminder twice a day", () => {
     expect(kinds({ localTime: "12:00", sent: new Set(["window_open"]) })).toEqual([]);
   });

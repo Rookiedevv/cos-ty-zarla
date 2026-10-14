@@ -23,8 +23,12 @@ export interface Profile {
   weigh_in_time: string;
   water_override_ml: number | null;
   notification_prefs: Partial<Record<PrefKey, boolean>> | null;
+  /** Email switches; a missing key means on. */
+  email_prefs: Partial<Record<EmailPrefKey, boolean>> | null;
   onboarded_at: string | null;
 }
+
+export type EmailPrefKey = "daily" | "weekly" | "friend";
 
 export interface MethodConfig {
   /** IF preset label, e.g. "16:8", or "custom". */
