@@ -186,6 +186,7 @@ export const en = {
     saved: "Meal saved",
     outsideWindow: "Outside your eating window",
     deleteConfirm: "Delete this meal?",
+    items: "What was in it",
   },
   ai: {
     title: "Log a meal",

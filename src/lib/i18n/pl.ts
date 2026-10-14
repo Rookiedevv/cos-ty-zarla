@@ -188,6 +188,7 @@ export const pl: Dict = {
     saved: "Posiłek zapisany",
     outsideWindow: "Poza oknem żywieniowym",
     deleteConfirm: "Usunąć ten posiłek?",
+    items: "Co było w posiłku",
   },
   ai: {
     title: "Dodaj posiłek",

@@ -14,7 +14,20 @@ export interface Meal {
   total_kcal: number;
   protein_g: number | null;
   outside_window: boolean;
+  verdict?: string | null;
+  meal_items?: MealItem[];
 }
+
+export interface MealItem {
+  name: string;
+  amount: number | null;
+  unit: "g" | "ml" | "pcs" | null;
+  kcal: number;
+  position: number;
+}
+
+/** Columns for meal lists: the meal plus its items, so a tapped meal can show what was in it. */
+export const MEAL_COLUMNS = "id, eaten_at, eaten_date, description, total_kcal, protein_g, outside_window, verdict, meal_items(name, amount, unit, kcal, position)";
 
 export interface Checkin {
   date: string;
@@ -78,7 +91,7 @@ export async function loadDay(supabase: SupabaseClient, profile: Profile, date: 
   const [weightRes, checkinRes, mealsRes, waterRes, targetsRes, intakeRes, healthRes, workoutsRes, devicesRes] = await Promise.all([
     supabase.from("weights").select("kg, date").eq("user_id", profile.id).lte("date", date).order("date", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("checkins").select("date, sleep_hours, rest_day").eq("user_id", profile.id).eq("date", date).maybeSingle(),
-    supabase.from("meals").select("id, eaten_at, eaten_date, description, total_kcal, protein_g, outside_window")
+    supabase.from("meals").select(MEAL_COLUMNS)
       .eq("user_id", profile.id).eq("eaten_date", date).order("eaten_at", { ascending: true }),
     supabase.from("water_logs").select("ml").eq("user_id", profile.id).eq("date", date),
     supabase.from("daily_targets").select("date, pre_carry_target, final_target").eq("user_id", profile.id).gte("date", historyStart).lt("date", date),

@@ -4,7 +4,7 @@ import { Panel, fmt } from "@/components/ui";
 import { WeightHistory } from "@/components/weight-history";
 import type { WeightPoint } from "@/components/weight-chart";
 import type { Meal } from "@/lib/day";
-import { todayFor } from "@/lib/day";
+import { MEAL_COLUMNS, todayFor } from "@/lib/day";
 import { addDays } from "@/lib/engine/dates";
 import { getDict } from "@/lib/i18n";
 import { requireOnboardedUser } from "@/lib/session";
@@ -53,7 +53,7 @@ async function MealsTab({ supabase, profile }: Ctx) {
   const from = addDays(today, -30);
 
   const [mealsRes, targetsRes] = await Promise.all([
-    supabase.from("meals").select("id, eaten_at, eaten_date, description, total_kcal, protein_g, outside_window")
+    supabase.from("meals").select(MEAL_COLUMNS)
       .eq("user_id", profile.id).gte("eaten_date", from).order("eaten_at", { ascending: true }),
     supabase.from("daily_targets").select("date, final_target").eq("user_id", profile.id).gte("date", from),
   ]);
