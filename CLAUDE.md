@@ -16,6 +16,16 @@ Live at https://cos-ty-zarla.vercel.app. Invite-only (Google login + allow-list)
 - Be honest about uncertainty: say what you verified and what you couldn't.
 - Commit messages: imperative summary + short body.
 
+## Links (give Robert these directly)
+- App: https://cos-ty-zarla.vercel.app (settings: `/settings?tab=diet` or `?tab=account`)
+- Supabase SQL editor: https://supabase.com/dashboard/project/zzxspnqrgvjetqwgvvzc/sql/new
+- Supabase project: https://supabase.com/dashboard/project/zzxspnqrgvjetqwgvvzc
+- Vercel env vars: https://vercel.com/roberts-projects-4ac7fc7c/cos-ty-zarla/settings/environment-variables
+- Vercel deployments (Redeploy here): https://vercel.com/roberts-projects-4ac7fc7c/cos-ty-zarla/deployments
+- GitHub: https://github.com/Rookiedevv/cos-ty-zarla (watch app: https://github.com/Rookiedevv/cos-ty-zarla/releases/latest/download/cos-ty-zarla-sync.apk)
+- Gmail app passwords (signed in as costyzarla@gmail.com): https://myaccount.google.com/apppasswords
+- Claude API keys/billing: https://console.anthropic.com
+
 ## Stack
 - Next.js 16 App Router (`src/proxy.ts` replaces middleware; check `node_modules/next/dist/docs/` before using APIs), React 19, TypeScript, Tailwind 4 with CSS-variable tokens in `src/app/globals.css` (clean white + blue palette, dark-mode variant; token names tile/enamel/ink/kompot/good/mustard/water/accent are historical).
 - Supabase: Postgres + RLS (own-rows policies), Google OAuth, allow-list trigger `handle_new_user`, Storage bucket `meal-photos`, pg_cron + pg_net calling `POST /api/cron/notify` every 5 min with `Bearer CRON_SECRET`.
