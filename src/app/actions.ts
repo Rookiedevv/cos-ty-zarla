@@ -405,6 +405,45 @@ export async function estimateMealAction(input: z.input<typeof estimateSchema>):
   }
 }
 
+// ───────────────────────── Recipe calculator ─────────────────────────
+
+export type RecipeResponse =
+  | { ok: true; estimate: import("@/lib/ai/recipe").RecipeEstimate }
+  | { ok: false; error: "ai_paused" | "not_configured" | "invalid" | "failed" };
+
+/** Ingredients + how it was cooked in, kcal for the whole dish out. Nothing is saved except the AI cost. */
+export async function estimateRecipeAction(input: { text: string }): Promise<RecipeResponse> {
+  const { profile } = await requireUser();
+  const parsed = z.object({ text: z.string().trim().min(3).max(3000) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  if (!process.env.ANTHROPIC_API_KEY || !process.env.SUPABASE_SECRET_KEY) return { ok: false, error: "not_configured" };
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { STOP_USD, costOf, spentThisMonth } = await import("@/lib/ai/budget");
+  const { estimateRecipe } = await import("@/lib/ai/recipe");
+  const { checkCostAlerts } = await import("@/lib/ai/alerts");
+  const admin = createAdminClient();
+
+  if ((await spentThisMonth(admin)) >= STOP_USD) return { ok: false, error: "ai_paused" };
+
+  try {
+    const call = await estimateRecipe({ text: parsed.data.text, language: profile.language });
+    await admin.from("ai_usage").insert({
+      user_id: profile.id,
+      model: call.model,
+      purpose: "recipe",
+      tokens_in: call.tokensIn,
+      tokens_out: call.tokensOut,
+      cost_usd: costOf(call.model, call.tokensIn, call.tokensOut),
+    });
+    await checkCostAlerts(admin, await spentThisMonth(admin));
+    return { ok: true, estimate: call.estimate };
+  } catch (e) {
+    console.error("recipe estimate failed", e);
+    return { ok: false, error: (e as Error).message === "NO_API_KEY" ? "not_configured" : "failed" };
+  }
+}
+
 export async function deleteMeal(id: string): Promise<ActionResult> {
   const { supabase } = await requireUser();
   if (!z.uuid().safeParse(id).success) return fail("invalid");

@@ -7,6 +7,7 @@ import { NavPending } from "./tab-link";
 
 const icons = {
   today: <path d="M4 12a8 8 0 1 0 16 0a8 8 0 1 0 -16 0M12 7v5l3 2" />,
+  recipe: <path d="M4 10h16v3a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6zM2 10h2M20 10h2M9 6c0-1 1-1 1-2M13 6c0-1 1-1 1-2" />,
   history: <path d="M5 5h14v15H5zM5 10h14M9 3v4M15 3v4" />,
   settings: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6" />,
 };
@@ -41,6 +42,7 @@ export function BottomNav() {
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t-2 border-grout bg-enamel pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto flex max-w-lg items-center px-2">
         {tab("/", t.nav.today, "today")}
+        {tab("/recipe", t.nav.recipe, "recipe")}
         <Link
           href="/log"
           className="-mt-6 mx-2 flex size-16 items-center justify-center rounded-full border-2 border-outline bg-accent text-on-accent shadow-[var(--panel-shadow)] transition-transform active:scale-90"

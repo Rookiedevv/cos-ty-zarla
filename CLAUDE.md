@@ -54,6 +54,7 @@ RLS tests in `supabase/tests/*.sql` run on a plain local Postgres with `stub_sup
 ## Features (all live)
 - Today: target with breakdown, morning check-in (sleep + workout plan, or rest day), meals, water, weigh-in, diet reminder card.
 - Meal logging: photo/barcode/text → AI estimate with up to 3 rounds of follow-up questions → editable items → save. Photos are deleted after 90 days; descriptions are kept.
+- Recipe calculator ("Przepis" tab, `/recipe`, `src/components/recipe-flow.tsx`, `src/lib/ai/recipe.ts`): text or dictated ingredients + method (🎤 via Web Speech API, `src/lib/client/dictation.ts`; hidden when unsupported) → portions → kcal per portion. Saves nothing; AI cost logged as purpose `recipe`.
 - Meals and workouts: tap to expand (full name, items, AI verdict, delete).
 - History tabs: Posiłki (30 days, kcal vs target with a coloured dot, accordion per day), Waga (chart + list + delete), Raporty.
 - Settings tabs: **Dieta** (weight, plan form, report emails + test button, follow a friend, cheatsheets) and **Konto i aplikacja** (reminders, watch, AI costs [admin], allow-list [admin], sign out). Keep this split.
@@ -68,6 +69,7 @@ RLS tests in `supabase/tests/*.sql` run on a plain local Postgres with `stub_sup
 ## Open issues / ideas (ask before doing any)
 - **Watch sleep shows "0 min snu".** Either Samsung Health isn't writing Sleep to Health Connect, or `HealthReader.kt` reads the aggregate badly. Proposed: read SleepSessionRecords (main sleep ending this morning, minus awake stages), add a diagnostic line in Żarła Sync, distinguish "no data" from 0, and use watch sleep even after check-in. Waiting for Robert to check Health Connect → Sen.
 - Undecided: keep the AI cost panel? Add a "clear my data" button?
+- Recipe calculator ideas for later: log a portion as a meal, save recipes for reuse, edit ingredients before calculating.
 - Not built yet: fasting timer, 5:2 weekly check, adaptive burn from weigh-ins (`burn_adjust`), trends screen, editing a saved meal, cost alerts by email (sender now exists).
 - Report emails land in Spam at first; users mark "Not spam" and add the sender to contacts.
 

@@ -178,7 +178,13 @@ After every confirmed meal, the AI adds a **one-line verdict** on how the meal f
 - The user describes the meal ("two eggs, toast with butter, coffee with milk").
 - Same pipeline. If the description is too vague, the AI asks follow-up questions until it can give a reasonable estimate (max 3 rounds), then shows the editable draft.
 
-### 7.3 Other
+### 7.3 Recipe calculator (Przepis tab)
+- The user types or dictates (🎤, browser speech recognition, Polish) the ingredients and how the dish was cooked, and picks the number of portions (1–12).
+- One AI call returns the whole dish's ingredients with amounts and kcal, accounting for cooking (frying fat, dry vs cooked weight), plus a short note of the biggest guesses.
+- Shows kcal per portion, the whole dish total and the ingredient list. Changing portions recalculates without a new AI call.
+- v1 saves nothing (no meal, no recipe); only the AI cost goes to `ai_usage` (purpose `recipe`) and counts toward the monthly limit.
+
+### 7.4 Other
 - **Water:** quick-add buttons (+250 / +500 ml, custom).
 - Edit or delete any past entry.
 - **Photo retention:** photos are deleted after 90 days. The meal's text description (the user's own text or the AI's description of the photo) and all logged items and values are kept permanently.
@@ -256,6 +262,7 @@ Notifications are only sent when there is **something to do**: no motivational s
 
 1. **Home / Today:** calorie ring (eaten / target / left), fasting timer or window status, water ring, today's meals, "+ Log meal" button, partner card.
 2. **Log meal:** camera/upload or text → questions → editable draft → time → confirm.
+2a. **Recipe (Przepis):** ingredients + method by text or voice → portions → kcal per portion.
 3. **Morning check-in:** sleep + planned activity.
 4. **History:** calendar of days, each with totals; tap to see meals.
 5. **Trends:** weight (weekly points), sleep, exercise, calories vs target.
