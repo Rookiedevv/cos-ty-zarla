@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { deleteMeal } from "@/app/actions";
 import { localTime } from "@/lib/engine/dates";
 import { useLang, useT } from "@/lib/i18n/client";
 import type { Meal } from "@/lib/day";
+import { withTimeout } from "./long-wait";
 import { fmt } from "./ui";
 
 /**
@@ -16,8 +17,27 @@ export function MealList({ meals, timezone, showEmpty = true }: { meals: Meal[];
   const lang = useLang();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState<Set<string>>(() => new Set());
+  // A deleted meal disappears at once; if the server says no, it comes back with a message.
+  const [shown, hide] = useOptimistic(meals, (cur, id: string) => cur.filter((m) => m.id !== id));
+  const [failed, setFailed] = useState(false);
+  const remove = (id: string) =>
+    start(async () => {
+      setFailed(false);
+      hide(id);
+      const r = await withTimeout(deleteMeal(id));
+      if (r === "timeout" || !r.ok) setFailed(true);
+    });
 
-  if (meals.length === 0) return showEmpty ? <p className="text-ink-soft">{t.today.noMeals}</p> : null;
+  const failure = failed && !pending ? <p role="alert" className="mb-2 text-sm text-kompot">{t.wait.failed}</p> : null;
+  if (shown.length === 0) {
+    if (!showEmpty) return failure;
+    return (
+      <>
+        {failure}
+        <p className="text-ink-soft">{t.today.noMeals}</p>
+      </>
+    );
+  }
 
   const toggle = (id: string) =>
     setOpen((prev) => {
@@ -29,8 +49,10 @@ export function MealList({ meals, timezone, showEmpty = true }: { meals: Meal[];
   const num = (n: number) => new Intl.NumberFormat(lang === "en" ? "en-GB" : "pl-PL", { maximumFractionDigits: 1 }).format(n);
 
   return (
-    <ul className="space-y-1">
-      {meals.map((m) => {
+    <>
+      {failure}
+      <ul className="space-y-1">
+      {shown.map((m) => {
         const isOpen = open.has(m.id);
         const items = [...(m.meal_items ?? [])].sort((a, b) => a.position - b.position);
         const panelId = `meal-${m.id}`;
@@ -96,10 +118,9 @@ export function MealList({ meals, timezone, showEmpty = true }: { meals: Meal[];
                   {m.outside_window && <span className="font-semibold text-mustard">{t.log.outsideWindow}</span>}
                   <button
                     type="button"
-                    disabled={pending}
                     className="-my-2 px-1 py-2 text-ink-soft underline underline-offset-2 hover:text-kompot"
                     onClick={() => {
-                      if (confirm(t.log.deleteConfirm)) start(async () => void (await deleteMeal(m.id)));
+                      if (confirm(t.log.deleteConfirm)) remove(m.id);
                     }}
                   >
                     {t.common.delete}
@@ -110,6 +131,7 @@ export function MealList({ meals, timezone, showEmpty = true }: { meals: Meal[];
           </li>
         );
       })}
-    </ul>
+      </ul>
+    </>
   );
 }

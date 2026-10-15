@@ -1,9 +1,10 @@
 "use client";
 
-import { useOptimistic, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { addWater } from "@/app/actions";
 import { useT } from "@/lib/i18n/client";
-import { Panel, fmt } from "./ui";
+import { withTimeout } from "./long-wait";
+import { Panel, Spinner, fmt } from "./ui";
 
 export function WaterPanel({ ml, target }: { ml: number; target: number }) {
   const t = useT();
@@ -11,17 +12,24 @@ export function WaterPanel({ ml, target }: { ml: number; target: number }) {
   const [shown, addShown] = useOptimistic(ml, (cur, delta: number) => Math.max(0, cur + delta));
   const pct = Math.min(100, (shown / target) * 100);
 
+  const [failed, setFailed] = useState(false);
+  // The amount changes at once; if saving fails it goes back and says so.
   const add = (delta: number) =>
     start(async () => {
+      setFailed(false);
       addShown(delta);
-      await addWater(delta);
+      const r = await withTimeout(addWater(delta));
+      if (r === "timeout" || !r.ok) setFailed(true);
     });
 
   return (
     <Panel>
       <div className="mb-2 flex items-baseline justify-between">
         <h2 className="board text-xl">{t.today.water}</h2>
-        <p className="tabular-nums">
+        <p className="flex items-center gap-1.5 tabular-nums">
+          <span aria-hidden className={`inline-flex transition-opacity ${pending ? "opacity-100" : "opacity-0"}`}>
+            <Spinner className="size-3.5 text-water" />
+          </span>
           <span className="font-semibold">{fmt(shown)}</span> / {fmt(target)} {t.common.ml}
         </p>
       </div>
@@ -48,6 +56,7 @@ export function WaterPanel({ ml, target }: { ml: number; target: number }) {
           −250 {t.common.ml}
         </button>
       </div>
+      {failed && !pending && <p role="alert" className="mt-2 text-sm text-kompot">{t.wait.failed}</p>}
     </Panel>
   );
 }

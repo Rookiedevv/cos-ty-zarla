@@ -11,19 +11,42 @@ export function PanelTitle({ children }: { children: ReactNode }) {
   return <h2 className="board mb-3 text-xl">{children}</h2>;
 }
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" | "quiet" };
+/** Small spinning circle; inherits the text colour. */
+export function Spinner({ className = "size-4" }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className={`shrink-0 animate-spin ${className}`} fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-export function Button({ variant = "primary", className = "", ...props }: ButtonProps) {
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "ghost" | "quiet";
+  /** Working: shows a spinner, blocks taps, keeps the button's colours so it reads as busy, not unavailable. */
+  loading?: boolean;
+};
+
+export function Button({ variant = "primary", className = "", loading = false, disabled, children, ...props }: ButtonProps) {
   const styles = {
     primary: "bg-accent text-on-accent border-accent hover:opacity-90",
     ghost: "bg-enamel text-ink border-outline hover:bg-tile",
     quiet: "bg-transparent text-ink-soft border-transparent underline underline-offset-4 hover:text-ink",
   }[variant];
+  const off = loading
+    ? "cursor-wait opacity-85"
+    : "disabled:cursor-not-allowed disabled:border-grout disabled:bg-grout disabled:text-ink-soft";
   return (
-    <button
-      {...props}
-      className={`min-h-12 rounded-xl border-2 px-4 font-semibold disabled:cursor-not-allowed disabled:border-grout disabled:bg-grout disabled:text-ink-soft ${styles} ${className}`}
-    />
+    <button {...props} disabled={disabled || loading} aria-busy={loading || undefined} className={`min-h-12 rounded-xl border-2 px-4 font-semibold ${off} ${styles} ${className}`}>
+      {loading ? (
+        <span className="inline-flex items-center justify-center gap-2">
+          <Spinner />
+          {children}
+        </span>
+      ) : (
+        children
+      )}
+    </button>
   );
 }
 

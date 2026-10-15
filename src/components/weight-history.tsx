@@ -1,8 +1,9 @@
 "use client";
 
-import { useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { deleteWeight } from "@/app/actions";
 import { useT, useLang } from "@/lib/i18n/client";
+import { withTimeout } from "./long-wait";
 import { Panel, PanelTitle } from "./ui";
 import { WeightChart, type WeightPoint } from "./weight-chart";
 
@@ -13,8 +14,17 @@ export function WeightHistory({ points }: { points: WeightPoint[] }) {
   const lang = useLang();
   const locale = lang === "en" ? "en-GB" : "pl-PL";
   const [pending, start] = useTransition();
+  const [shown, hide] = useOptimistic(points, (cur, date: string) => cur.filter((p) => p.date !== date));
+  const [failed, setFailed] = useState(false);
+  const remove = (date: string) =>
+    start(async () => {
+      setFailed(false);
+      hide(date);
+      const r = await withTimeout(deleteWeight(date));
+      if (r === "timeout" || !r.ok) setFailed(true);
+    });
 
-  if (points.length === 0) {
+  if (shown.length === 0) {
     return (
       <Panel>
         <p className="text-ink-soft">{h.weightEmpty}</p>
@@ -26,23 +36,24 @@ export function WeightHistory({ points }: { points: WeightPoint[] }) {
     `${signed && n > 0 ? "+" : n < 0 ? "−" : ""}${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(n))}`;
   const date = (d: string) =>
     new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${d}T12:00:00Z`));
-  const first = points[0].kg;
-  const latest = points[points.length - 1].kg;
+  const first = shown[0].kg;
+  const latest = shown[shown.length - 1].kg;
 
   return (
     <>
       <Panel>
         <div className="mb-2 flex items-baseline justify-between gap-3">
           <PanelTitle>{h.weightChart}</PanelTitle>
-          {points.length > 1 && <p className="shrink-0 text-sm font-semibold">{h.sinceStart(kg(latest - first, true))}</p>}
+          {shown.length > 1 && <p className="shrink-0 text-sm font-semibold">{h.sinceStart(kg(latest - first, true))}</p>}
         </div>
-        <WeightChart points={points} lang={lang} title={h.weightChart} />
+        <WeightChart points={shown} lang={lang} title={h.weightChart} />
       </Panel>
 
       <Panel>
         <PanelTitle>{h.weightList}</PanelTitle>
+        {failed && !pending && <p role="alert" className="mb-2 text-sm text-kompot">{t.wait.failed}</p>}
         <ul className="divide-y divide-grout">
-          {[...points].reverse().map((p, idx, arr) => {
+          {[...shown].reverse().map((p, idx, arr) => {
             const prev = arr[idx + 1];
             const diff = prev ? p.kg - prev.kg : null;
             return (
@@ -57,10 +68,9 @@ export function WeightHistory({ points }: { points: WeightPoint[] }) {
                   <span className="board text-xl tabular-nums">{kg(p.kg)} kg</span>
                   <button
                     type="button"
-                    disabled={pending}
                     className="min-h-11 px-1 text-sm text-ink-soft underline underline-offset-2 hover:text-kompot"
                     onClick={() => {
-                      if (confirm(h.deleteWeightConfirm(kg(p.kg), date(p.date)))) start(async () => void (await deleteWeight(p.date)));
+                      if (confirm(h.deleteWeightConfirm(kg(p.kg), date(p.date)))) remove(p.date);
                     }}
                   >
                     {h.deleteWeight}

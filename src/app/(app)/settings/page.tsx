@@ -5,6 +5,7 @@ import { AllowList } from "@/components/allow-list";
 import { NotificationSettings } from "@/components/notification-settings";
 import { PlanForm } from "@/components/plan-form";
 import { EmailReportSettings, FollowSettings, type Person } from "@/components/report-settings";
+import { TabLink } from "@/components/tab-link";
 import { Button, Panel, PanelTitle } from "@/components/ui";
 import { WatchSettings, type Device } from "@/components/watch-settings";
 import { WeightQuick } from "@/components/weight-quick";
@@ -37,16 +38,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {/* Two tabs: everything about the diet, and everything else. */}
       <nav aria-label={t.settings.title} className="grid grid-cols-2 gap-1 rounded-2xl bg-grout p-1">
         {(["diet", "account"] as const).map((key) => (
-          <Link
-            key={key}
-            href={`/settings?tab=${key}`}
-            aria-current={tab === key ? "page" : undefined}
-            className={`flex min-h-11 items-center justify-center rounded-xl px-2 text-center font-semibold ${
-              tab === key ? "bg-enamel text-ink shadow-[var(--panel-shadow)]" : "text-ink-soft hover:text-ink"
-            }`}
-          >
+          <TabLink key={key} href={`/settings?tab=${key}`} active={tab === key}>
             {key === "diet" ? t.settings.tabDiet : t.settings.tabAccount}
-          </Link>
+          </TabLink>
         ))}
       </nav>
 

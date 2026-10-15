@@ -128,3 +128,16 @@ input, textarea, select {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Thin bar along the top while a screen loads: a segment that keeps sliding. */
+@keyframes top-bar-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.top-bar > span {
+  animation: top-bar-slide 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Without motion, the bar is a steady full-width line, so loading is still visible. */
+  .top-bar > span { width: 100% !important; transform: none !important; opacity: 0.6; }
+}

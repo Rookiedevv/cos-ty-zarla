@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { approveFollow, removeFollow, requestFollow, saveEmailPrefs, sendTestReportAction } from "@/app/actions";
 import { useT } from "@/lib/i18n/client";
+import { LongWait, withTimeout } from "./long-wait";
 import type { EmailPrefKey } from "@/lib/profile";
 import { Button, Notice, Panel, PanelTitle } from "./ui";
 
@@ -31,17 +32,20 @@ function Switch({ checked, onChange, title, hint }: { checked: boolean; onChange
 
 /** Which reports also come by email. */
 export function EmailReportSettings({ prefs, configured }: { prefs: Partial<Record<EmailPrefKey, boolean>>; configured: boolean }) {
-  const t = useT().reports;
+  const all = useT();
+  const t = all.reports;
   const [values, setValues] = useState(() => Object.fromEntries(KEYS.map((k) => [k, prefs[k] !== false])) as Record<EmailPrefKey, boolean>);
   const [, start] = useTransition();
   const [testing, startTest] = useTransition();
+  const [prefFailed, setPrefFailed] = useState(false);
   const [result, setResult] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
   const label = { daily: t.emailDaily, weekly: t.emailWeekly, friend: t.emailFriend };
   const sendTest = () =>
     startTest(async () => {
       setResult(null);
-      const r = await sendTestReportAction();
-      if (r.ok) setResult({ tone: "info", text: t.testSent(r.to) });
+      const r = await withTimeout(sendTestReportAction(), 60_000);
+      if (r === "timeout") setResult({ tone: "warn", text: all.wait.timeout });
+      else if (r.ok) setResult({ tone: "info", text: t.testSent(r.to) });
       else if (r.error === "not_configured") setResult({ tone: "warn", text: t.testNotSetup });
       else if (/auth|535|534|credentials|password/i.test(r.error)) setResult({ tone: "warn", text: t.testAuth(r.sender ?? "?", r.error) });
       else setResult({ tone: "warn", text: t.testFailed(r.error) });
@@ -64,19 +68,29 @@ export function EmailReportSettings({ prefs, configured }: { prefs: Partial<Reco
               title={label[k][0]}
               hint={label[k][1]}
               onChange={() => {
+                const prev = values;
                 const next = { ...values, [k]: !values[k] };
                 setValues(next);
-                start(async () => void (await saveEmailPrefs(next)));
+                setPrefFailed(false);
+                start(async () => {
+                  const r = await saveEmailPrefs(next).catch(() => null);
+                  if (!r?.ok) {
+                    setValues(prev);
+                    setPrefFailed(true);
+                  }
+                });
               }}
             />
           </li>
         ))}
       </ul>
+      {prefFailed && <p role="alert" className="text-sm text-kompot">{all.wait.failed}</p>}
       {configured && (
         <div className="space-y-2 border-t border-grout pt-3">
-          <Button variant="ghost" className="w-full" disabled={testing} onClick={sendTest}>
+          <Button variant="ghost" className="w-full" loading={testing} onClick={sendTest}>
             {testing ? t.testSending : t.testSend}
           </Button>
+          {testing && <LongWait steps={all.wait.report} expectedSec={15} />}
           {result && <Notice tone={result.tone}><span className="break-words">{result.text}</span></Notice>}
         </div>
       )}
@@ -103,7 +117,12 @@ export function FollowSettings({
 }) {
   const t = useT().reports;
   const [pending, start] = useTransition();
-  const run = (fn: () => Promise<unknown>) => start(async () => void (await fn()));
+  const [busy, setBusy] = useState<string | null>(null);
+  const run = (key: string, fn: () => Promise<unknown>) => {
+    setBusy(key);
+    start(async () => void (await fn()));
+  };
+  const is = (key: string) => pending && busy === key;
   const small = "min-h-11 shrink-0 px-3 text-sm";
 
   return (
@@ -120,10 +139,10 @@ export function FollowSettings({
               <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span className="min-w-0 font-semibold break-words">{p.name}</span>
                 <span className="flex gap-2">
-                  <Button variant="ghost" className={small} disabled={pending} onClick={() => run(() => removeFollow(p.id, selfId))}>
+                  <Button variant="ghost" className={small} loading={is(`out-${p.id}`)} disabled={pending} onClick={() => run(`out-${p.id}`, () => removeFollow(p.id, selfId))}>
                     {t.decline}
                   </Button>
-                  <Button className={small} disabled={pending} onClick={() => run(() => approveFollow(p.id))}>
+                  <Button className={small} loading={is(`ok-${p.id}`)} disabled={pending} onClick={() => run(`ok-${p.id}`, () => approveFollow(p.id))}>
                     {t.accept}
                   </Button>
                 </span>
@@ -150,11 +169,11 @@ export function FollowSettings({
                   )}
                 </span>
                 {status ? (
-                  <Button variant="ghost" className={small} disabled={pending} onClick={() => run(() => removeFollow(selfId, p.id))}>
+                  <Button variant="ghost" className={small} loading={is(`stop-${p.id}`)} disabled={pending} onClick={() => run(`stop-${p.id}`, () => removeFollow(selfId, p.id))}>
                     {status === "approved" ? t.stop : t.cancel}
                   </Button>
                 ) : (
-                  <Button className={small} disabled={pending} onClick={() => run(() => requestFollow(p.id))}>
+                  <Button className={small} loading={is(`ask-${p.id}`)} disabled={pending} onClick={() => run(`ask-${p.id}`, () => requestFollow(p.id))}>
                     {t.follow}
                   </Button>
                 )}
@@ -171,7 +190,7 @@ export function FollowSettings({
             {followers.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-2 py-2">
                 <span className="min-w-0 break-words">{p.name}</span>
-                <Button variant="ghost" className={small} disabled={pending} onClick={() => run(() => removeFollow(p.id, selfId))}>
+                <Button variant="ghost" className={small} loading={is(`out-${p.id}`)} disabled={pending} onClick={() => run(`out-${p.id}`, () => removeFollow(p.id, selfId))}>
                   {t.removeFollower}
                 </Button>
               </li>

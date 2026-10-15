@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useT } from "@/lib/i18n/client";
+import { NavPending } from "./tab-link";
 
 const icons = {
   today: <path d="M4 12a8 8 0 1 0 16 0a8 8 0 1 0 -16 0M12 7v5l3 2" />,
@@ -27,8 +28,9 @@ export function BottomNav() {
       <Link
         href={href}
         aria-current={active ? "page" : undefined}
-        className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-semibold ${active ? "text-ink" : "text-ink-soft"}`}
+        className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-semibold active:scale-95 ${active ? "text-ink" : "text-ink-soft"}`}
       >
+        <NavPending />
         <Icon name={icon} />
         {label}
       </Link>
@@ -41,7 +43,7 @@ export function BottomNav() {
         {tab("/", t.nav.today, "today")}
         <Link
           href="/log"
-          className="-mt-6 mx-2 flex size-16 items-center justify-center rounded-full border-2 border-outline bg-accent text-on-accent shadow-[var(--panel-shadow)]"
+          className="-mt-6 mx-2 flex size-16 items-center justify-center rounded-full border-2 border-outline bg-accent text-on-accent shadow-[var(--panel-shadow)] transition-transform active:scale-90"
           aria-label={t.today.logMeal}
         >
           <svg aria-hidden viewBox="0 0 24 24" className="size-8" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round">

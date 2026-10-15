@@ -47,7 +47,7 @@ export function AllowList({ emails, self }: { emails: string[]; self: string }) 
         }}
       >
         <input type="email" required className={`${inputClass} min-w-48 flex-1`} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@gmail.com" aria-label={t.settings.addEmail} />
-        <Button type="submit" disabled={pending} className="whitespace-nowrap max-[359px]:w-full">
+        <Button type="submit" loading={pending} className="whitespace-nowrap max-[359px]:w-full">
           {t.settings.addEmail}
         </Button>
       </form>

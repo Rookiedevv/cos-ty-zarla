@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { logMeal } from "@/app/actions";
 import { useT } from "@/lib/i18n/client";
+import { withTimeout } from "./long-wait";
 import { Button, Field, Panel, inputClass } from "./ui";
 import { WhenPicker, whenPayload, whenReady, type WhenValue } from "./when-picker";
 
@@ -47,12 +48,14 @@ export function LogMealForm({ today, showProtein, initialDescription = "" }: { t
       <Button
         type="button"
         className="w-full"
-        disabled={!valid || pending}
+        loading={pending}
+        disabled={!valid}
         onClick={() =>
           start(async () => {
-            const r = await logMeal({ description, total_kcal: Number(kcal), protein_g: protein.replace(",", "."), source: "manual", ...whenPayload(when) });
-            if (r.ok) router.push("/");
-            else setError(t.common.errorGeneric);
+            setError(null);
+            const r = await withTimeout(logMeal({ description, total_kcal: Number(kcal), protein_g: protein.replace(",", "."), source: "manual", ...whenPayload(when) }));
+            if (r !== "timeout" && r.ok) router.push("/");
+            else setError(t.wait.saveFailed);
           })
         }
       >

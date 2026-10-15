@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { MealList } from "@/components/meal-list";
 import { DailyReportView, WeeklyReportView, signedKg } from "@/components/report-view";
+import { TabLink } from "@/components/tab-link";
 import { Panel, fmt } from "@/components/ui";
 import { WeightHistory } from "@/components/weight-history";
 import type { WeightPoint } from "@/components/weight-chart";
@@ -27,16 +27,9 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
       <h1 className="board text-3xl">{t.history.title}</h1>
       <nav aria-label={t.history.title} className="grid grid-cols-3 gap-1 rounded-2xl bg-grout p-1">
         {TABS.map((key) => (
-          <Link
-            key={key}
-            href={`/history?tab=${key}`}
-            aria-current={tab === key ? "page" : undefined}
-            className={`flex min-h-11 items-center justify-center rounded-xl px-2 font-semibold ${
-              tab === key ? "bg-enamel text-ink shadow-[var(--panel-shadow)]" : "text-ink-soft hover:text-ink"
-            }`}
-          >
+          <TabLink key={key} href={`/history?tab=${key}`} active={tab === key}>
             {{ meals: t.history.tabMeals, weight: t.history.tabWeight, reports: t.history.tabReports }[key]}
-          </Link>
+          </TabLink>
         ))}
       </nav>
       {tab === "meals" && <MealsTab supabase={supabase} profile={profile} />}

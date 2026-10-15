@@ -7,6 +7,7 @@ import type { Estimate } from "@/lib/ai/estimate";
 import { preparePhoto, type PreparedPhoto } from "@/lib/client/photo";
 import { useT } from "@/lib/i18n/client";
 import { LogMealForm } from "./log-meal-form";
+import { LongWait, WaitFailed, withTimeout } from "./long-wait";
 import { Button, Field, Notice, Panel, fmt, inputClass } from "./ui";
 import { WhenPicker, whenPayload, whenReady, type WhenValue } from "./when-picker";
 
@@ -63,6 +64,11 @@ export function AiMealFlow({
   const [notice, setNotice] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [pending, start] = useTransition();
+  const [estimating, startEstimate] = useTransition();
+  // Each estimate attempt gets a number; a late answer from an attempt that timed out is ignored.
+  const attempt = useRef(0);
+  const [attemptKey, setAttemptKey] = useState(0);
+  const [retry, setRetry] = useState<(() => void) | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -82,16 +88,27 @@ export function AiMealFlow({
   const errorText = (r: Extract<EstimateResponse, { ok: false }>) =>
     r.error === "ai_paused" ? ai.paused : r.error === "not_configured" ? ai.notConfigured : r.error === "invalid" ? ai.needInput : ai.failed;
 
-  const runEstimate = (nextRound: number, allAnswers: { question: string; answer: string }[]) =>
-    start(async () => {
+  const runEstimate = (nextRound: number, allAnswers: { question: string; answer: string }[]) => {
+    const id = ++attempt.current;
+    setAttemptKey(id);
+    setRetry(null);
+    startEstimate(async () => {
       setNotice(null);
-      const r = await estimateMealAction({
-        photo: photo ? { data: photo.data, mediaType: photo.mediaType } : undefined,
-        text: text.trim() || undefined,
-        barcodes: photo?.barcodes ?? [],
-        answers: allAnswers,
-        round: nextRound,
-      });
+      const r = await withTimeout(
+        estimateMealAction({
+          photo: photo ? { data: photo.data, mediaType: photo.mediaType } : undefined,
+          text: text.trim() || undefined,
+          barcodes: photo?.barcodes ?? [],
+          answers: allAnswers,
+          round: nextRound,
+        }),
+      );
+      if (id !== attempt.current) return;
+      if (r === "timeout") {
+        attempt.current++;
+        setRetry(() => () => runEstimate(nextRound, allAnswers));
+        return;
+      }
       if (!r.ok) {
         setNotice({ tone: "warn", text: errorText(r) });
         if (r.error === "ai_paused" || r.error === "not_configured") setStage("manual");
@@ -110,6 +127,7 @@ export function AiMealFlow({
       setPick({});
       setStage(r.estimate.questions.length ? "questions" : "review");
     });
+  };
 
   const submitAnswers = () => {
     if (!estimate) return;
@@ -125,7 +143,8 @@ export function AiMealFlow({
 
   const save = () =>
     start(async () => {
-      const r = await logMeal({
+      setNotice(null);
+      const r = await withTimeout(logMeal({
         description: description.trim(),
         items: items.map((i) => ({
           name: i.name.trim(),
@@ -141,9 +160,9 @@ export function AiMealFlow({
         ai_draft: estimate ?? undefined,
         photo: photo ? { data: photo.data, mediaType: photo.mediaType } : undefined,
         ...whenPayload(when),
-      });
-      if (r.ok) router.push("/");
-      else setNotice({ tone: "warn", text: t.common.errorGeneric });
+      }));
+      if (r !== "timeout" && r.ok) router.push("/");
+      else setNotice({ tone: "warn", text: t.wait.saveFailed });
     });
 
   const reset = () => {
@@ -163,6 +182,8 @@ export function AiMealFlow({
     <main className="space-y-4 pt-2">
       <h1 className="board text-3xl">{ai.title}</h1>
       {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
+      {estimating && <LongWait key={attemptKey} steps={photo ? t.wait.mealPhoto : t.wait.mealText} expectedSec={photo ? 10 : 7} />}
+      {retry && !estimating && <WaitFailed onRetry={retry} />}
 
       {stage === "input" && (
         <Panel className="space-y-5">
@@ -197,8 +218,8 @@ export function AiMealFlow({
             <textarea className={`${inputClass} min-h-24`} value={text} onChange={(e) => setText(e.target.value)} placeholder={ai.describePlaceholder} maxLength={1500} />
           </Field>
 
-          <Button className="w-full" disabled={pending || preparing || (!photo && !text.trim())} onClick={() => runEstimate(1, [])}>
-            {pending ? ai.estimating : ai.estimate}
+          <Button className="w-full" loading={estimating} disabled={preparing || (!photo && !text.trim())} onClick={() => runEstimate(1, [])}>
+            {estimating ? ai.estimating : ai.estimate}
           </Button>
           <Button variant="quiet" className="w-full" onClick={() => setStage("manual")}>
             {ai.manual}
@@ -245,10 +266,10 @@ export function AiMealFlow({
               />
             </fieldset>
           ))}
-          <Button className="w-full" disabled={pending} onClick={submitAnswers}>
-            {pending ? ai.estimating : ai.continue}
+          <Button className="w-full" loading={estimating} onClick={submitAnswers}>
+            {estimating ? ai.estimating : ai.continue}
           </Button>
-          <Button variant="quiet" className="w-full" disabled={pending} onClick={() => setStage("review")}>
+          <Button variant="quiet" className="w-full" disabled={estimating} onClick={() => setStage("review")}>
             {ai.skipQuestions}
           </Button>
         </Panel>
@@ -313,7 +334,7 @@ export function AiMealFlow({
 
           <WhenPicker value={when} onChange={setWhen} today={today} />
 
-          <Button className="w-full" disabled={!canSave || pending} onClick={save}>
+          <Button className="w-full" loading={pending} disabled={!canSave} onClick={save}>
             {pending ? t.common.saving : ai.save}
           </Button>
           <Button variant="quiet" className="w-full" disabled={pending} onClick={reset}>

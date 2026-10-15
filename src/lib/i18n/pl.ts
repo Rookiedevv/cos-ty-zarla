@@ -17,6 +17,18 @@ export const pl: Dict = {
     yesterday: "Wczoraj",
     errorGeneric: "Nie zapisało się. Sprawdź połączenie i spróbuj ponownie.",
   },
+  wait: {
+    slow: "To trwa dłużej niż zwykle. Nadal pracuję…",
+    timeout: "Coś poszło nie tak: nie przyszła odpowiedź.",
+    retry: "Spróbuj ponownie",
+    loading: "Ładowanie…",
+    failed: "Nie udało się. Sprawdź internet i spróbuj ponownie.",
+    saveFailed: "Nie udało się zapisać. Sprawdź internet i spróbuj ponownie.",
+    mealPhoto: ["Wysyłam zdjęcie…", "Rozpoznaję potrawy…", "Liczę kalorie…", "Sprawdzam dietę…"],
+    mealText: ["Czytam opis…", "Liczę kalorie…", "Sprawdzam dietę…"],
+    workout: ["Analizuję trening…", "Liczę kalorie…"],
+    report: ["Zbieram dane…", "AI pisze komentarze…", "Wysyłam e-maile…"],
+  },
   nav: { today: "Dziś", log: "Dodaj", history: "Historia", settings: "Ustawienia" },
   login: {
     title: "Coś ty żarła",

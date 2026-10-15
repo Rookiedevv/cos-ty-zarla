@@ -26,7 +26,9 @@ async function currentSubscription() {
 }
 
 export function NotificationSettings({ prefs }: { prefs: Partial<Record<PrefKey, boolean>> }) {
-  const t = useT().notifySettings;
+  const all = useT();
+  const t = all.notifySettings;
+  const failedText = all.wait.failed;
   const [status, setStatus] = useState<Status>("checking");
   const [message, setMessage] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
   const [values, setValues] = useState(() => Object.fromEntries(PREF_KEYS.map((k) => [k, prefs[k] !== false])) as Record<PrefKey, boolean>);
@@ -76,9 +78,16 @@ export function NotificationSettings({ prefs }: { prefs: Partial<Record<PrefKey,
     });
 
   const toggle = (k: PrefKey) => {
+    const prev = values;
     const next = { ...values, [k]: !values[k] };
     setValues(next);
-    start(async () => void (await saveNotificationPrefs(next)));
+    start(async () => {
+      const r = await saveNotificationPrefs(next).catch(() => null);
+      if (!r?.ok) {
+        setValues(prev);
+        setMessage({ tone: "warn", text: failedText });
+      }
+    });
   };
 
   return (
@@ -90,7 +99,7 @@ export function NotificationSettings({ prefs }: { prefs: Partial<Record<PrefKey,
         {status === "off" && (
           <>
             {!installed && <p className="text-sm text-ink-soft">{t.installFirst}</p>}
-            <Button className="w-full" onClick={enable} disabled={pending}>
+            <Button className="w-full" onClick={enable} loading={pending}>
               {pending ? t.enabling : t.enable}
             </Button>
           </>

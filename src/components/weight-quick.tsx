@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { saveWeight } from "@/app/actions";
 import { useT } from "@/lib/i18n/client";
+import { withTimeout } from "./long-wait";
 import { Button, inputClass } from "./ui";
 
 export function WeightQuick({ last }: { last?: { kg: number; date: string } | null }) {
@@ -17,8 +18,10 @@ export function WeightQuick({ last }: { last?: { kg: number; date: string } | nu
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
-          const r = await saveWeight(Number(kg.replace(",", ".")));
-          setError(r.ok ? null : t.common.errorGeneric);
+          setError(null);
+          const r = await withTimeout(saveWeight(Number(kg.replace(",", "."))));
+          if (r === "timeout") setError(t.wait.saveFailed);
+          else if (!r.ok) setError(r.error === "invalid" ? t.common.errorGeneric : t.wait.saveFailed);
         });
       }}
     >
@@ -44,7 +47,7 @@ export function WeightQuick({ last }: { last?: { kg: number; date: string } | nu
         </p>
       )}
       {error && <p className="text-sm text-kompot">{error}</p>}
-      <Button type="submit" disabled={pending} className="w-full">
+      <Button type="submit" loading={pending} className="w-full">
         {pending ? t.common.saving : t.weight.save}
       </Button>
     </form>

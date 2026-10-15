@@ -8,6 +8,7 @@ import { ageOn, localDate } from "@/lib/engine/dates";
 import { computeTarget, waterTargetMl } from "@/lib/engine/target";
 import type { BodyProfile, FoodFocus, Lifestyle, Method, Sex } from "@/lib/engine/types";
 import { I18nProvider, useLang, useT } from "@/lib/i18n/client";
+import { withTimeout } from "./long-wait";
 import { hhmm, IF_PRESETS, type Profile } from "@/lib/profile";
 import { BirthDateInput } from "./birth-date-input";
 import { Button, ChoiceGroup, Field, Notice, Panel, PanelTitle, dec, fmt, inputClass } from "./ui";
@@ -121,8 +122,9 @@ function PlanFormInner({ mode, profile, weightKg, onLang, only }: { mode: "onboa
         pace: s.pace,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       } as ProfileInput;
-      const r = await saveProfile(input, mode);
-      if (!r.ok) setError(t.common.errorGeneric);
+      const r = await withTimeout(saveProfile(input, mode));
+      if (r === "timeout") setError(t.wait.saveFailed);
+      else if (!r.ok) setError(t.common.errorGeneric);
       else if (mode === "onboarding") router.push("/");
       else {
         setSavedAt(Date.now());
@@ -141,7 +143,7 @@ function PlanFormInner({ mode, profile, weightKg, onLang, only }: { mode: "onboa
         ))}
         {error && <Notice tone="warn">{error}</Notice>}
         <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 -mx-4 border-t-2 border-grout bg-tile px-4 py-3">
-          <Button className="w-full" disabled={pending || !sections.every((x) => x.valid)} onClick={submit}>
+          <Button className="w-full" loading={pending} disabled={!sections.every((x) => x.valid)} onClick={submit}>
             {pending ? t.common.saving : savedAt ? `${t.settings.saved} ✓` : t.common.save}
           </Button>
         </div>
@@ -198,7 +200,7 @@ function PlanFormInner({ mode, profile, weightKg, onLang, only }: { mode: "onboa
           </Button>
         )}
         {isSummary ? (
-          <Button className="flex-1" onClick={submit} disabled={pending}>
+          <Button className="flex-1" onClick={submit} loading={pending}>
             {pending ? t.common.saving : t.onboarding.finish}
           </Button>
         ) : (

@@ -15,6 +15,18 @@ export const en = {
     yesterday: "Yesterday",
     errorGeneric: "That didn't save. Check your connection and try again.",
   },
+  wait: {
+    slow: "This is taking longer than usual. Still working…",
+    timeout: "Something went wrong: no answer came back.",
+    retry: "Try again",
+    loading: "Loading…",
+    failed: "That didn't go through. Check your connection and try again.",
+    saveFailed: "Couldn't save. Check your connection and try again.",
+    mealPhoto: ["Sending the photo…", "Recognising the food…", "Counting calories…", "Checking your diet…"],
+    mealText: ["Reading your description…", "Counting calories…", "Checking your diet…"],
+    workout: ["Analysing the workout…", "Counting calories…"],
+    report: ["Collecting your data…", "AI is writing the comments…", "Sending the emails…"],
+  },
   nav: { today: "Today", log: "Log", history: "History", settings: "Settings" },
   login: {
     title: "Coś ty żarła",

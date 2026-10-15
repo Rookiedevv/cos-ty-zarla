@@ -6,6 +6,7 @@ import { estimateWorkoutAction, saveCheckin, type WorkoutInput } from "@/app/act
 import { workoutKcal } from "@/lib/engine/target";
 import type { Effort, WorkoutKind } from "@/lib/engine/types";
 import { useT } from "@/lib/i18n/client";
+import { LongWait, WaitFailed, withTimeout } from "./long-wait";
 import { Button, ChoiceGroup, Notice, Panel, fmt, inputClass } from "./ui";
 
 /** Sleep buckets → representative hours stored in the check-in. */
@@ -64,13 +65,16 @@ export function CheckinForm({
   const save = () =>
     start(async () => {
       const exact = fromWatch && toBucket(watchSleepMinutes! / 60) === sleep ? Math.round((watchSleepMinutes! / 60) * 10) / 10 : null;
-      const r = await saveCheckin({
-        sleep_hours: exact ?? (sleep ? Number(sleep) : null),
-        rest_day: !hasWatch && restDay,
-        workouts: hasWatch ? undefined : workouts.map<WorkoutInput>((w) => ({ ...w })),
-      });
-      if (r.ok) router.push("/");
-      else setError(t.common.errorGeneric);
+      setError(null);
+      const r = await withTimeout(
+        saveCheckin({
+          sleep_hours: exact ?? (sleep ? Number(sleep) : null),
+          rest_day: !hasWatch && restDay,
+          workouts: hasWatch ? undefined : workouts.map<WorkoutInput>((w) => ({ ...w })),
+        }),
+      );
+      if (r !== "timeout" && r.ok) router.push("/");
+      else setError(t.wait.saveFailed);
     });
 
   return (
@@ -150,7 +154,7 @@ export function CheckinForm({
 
         {error && <p className="text-sm text-kompot">{error}</p>}
         {!hasWatch && !planReady && !editing && <p className="text-sm text-ink-soft">{c.needPlan}</p>}
-        <Button type="button" className="w-full" disabled={!sleep || !planReady || editing || pending} onClick={save}>
+        <Button type="button" className="w-full" loading={pending} disabled={!sleep || !planReady || editing} onClick={save}>
           {pending ? t.common.saving : c.save}
         </Button>
       </Panel>
@@ -174,13 +178,20 @@ function WorkoutEditor({ weightKg, onAdd, onCancel }: { weightKg: number; onAdd:
   const mins = minutes ?? (customMinutes ? Number(customMinutes) : null);
   const quickKcal = kind && kind !== "other" && mins && effort ? workoutKcal(kind, effort, mins, weightKg) : null;
 
-  const runEstimate = () =>
+  const [attemptKey, setAttemptKey] = useState(0);
+  const [timedOut, setTimedOut] = useState(false);
+  const runEstimate = () => {
+    const id = attemptKey + 1;
+    setAttemptKey(id);
+    setTimedOut(false);
     start(async () => {
       setNotice(null);
-      const r = await estimateWorkoutAction({ text, minutes: mins });
+      const r = await withTimeout(estimateWorkoutAction({ text, minutes: mins }));
+      if (r === "timeout") return setTimedOut(true);
       if (r.ok) setEstimate({ label: r.label, minutes: r.minutes, kcal: r.kcal });
       else setNotice(r.error === "ai_paused" ? ai.paused : r.error === "not_configured" ? ai.notConfigured : ai.failed);
     });
+  };
 
   return (
     <div className="space-y-4 rounded-xl border-2 border-accent p-3">
@@ -252,10 +263,12 @@ function WorkoutEditor({ weightKg, onAdd, onCancel }: { weightKg: number; onAdd:
       {quickKcal != null && <p className="font-semibold">≈ {fmt(quickKcal)} {t.common.kcal}</p>}
       {estimate && <p className="font-semibold">{c.estimated(estimate.label, estimate.kcal)}</p>}
       {notice && <Notice tone="warn">{notice}</Notice>}
+      {pending && <LongWait key={attemptKey} steps={t.wait.workout} expectedSec={5} />}
+      {timedOut && !pending && <WaitFailed onRetry={runEstimate} />}
 
       <div className="flex flex-wrap gap-2">
         {kind === "other" && !estimate ? (
-          <Button className="flex-1 whitespace-nowrap" disabled={text.trim().length < 2 || pending} onClick={runEstimate}>
+          <Button className="flex-1 whitespace-nowrap" loading={pending} disabled={text.trim().length < 2} onClick={runEstimate}>
             {pending ? c.estimating : c.estimate}
           </Button>
         ) : (

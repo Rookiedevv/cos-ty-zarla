@@ -77,7 +77,7 @@ export function WatchSettings({ devices, nowIso }: { devices: Device[]; nowIso: 
           </Button>
         </div>
       ) : (
-        <Button variant="ghost" className="w-full" disabled={pending} onClick={connect}>
+        <Button variant="ghost" className="w-full" loading={pending} onClick={connect}>
           {pending ? w.connecting : w.connect}
         </Button>
       )}
