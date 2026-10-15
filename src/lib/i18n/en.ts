@@ -282,7 +282,7 @@ export const en = {
     testSent: (to: string) => `Sent to ${to}. Check your inbox — and Spam, the first time.`,
     testNotSetup: "Email sending isn't set up in Vercel yet.",
     testFailed: (why: string) => `Couldn't send: ${why}`,
-    testAuth: "Gmail refused the login. Check GMAIL_USER and GMAIL_APP_PASSWORD in Vercel, then redeploy.",
+    testAuth: (sender: string, code: string) => `Gmail refused the login for ${sender}. Gmail says: ${code}`,
     followTitle: "Follow a friend",
     followHelp: "Get a short weekly summary of someone's progress. They have to agree first.",
     follow: "Ask to follow",

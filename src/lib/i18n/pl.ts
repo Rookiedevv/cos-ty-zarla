@@ -284,7 +284,7 @@ export const pl: Dict = {
     testSent: (to) => `Wysłano na ${to}. Sprawdź skrzynkę — za pierwszym razem także Spam.`,
     testNotSetup: "Wysyłka e-maili nie jest jeszcze ustawiona w Vercelu.",
     testFailed: (why) => `Nie udało się wysłać: ${why}`,
-    testAuth: "Gmail odrzucił logowanie. Sprawdź GMAIL_USER i GMAIL_APP_PASSWORD w Vercelu i zrób Redeploy.",
+    testAuth: (sender, code) => `Gmail odrzucił logowanie dla ${sender}. Odpowiedź Gmaila: ${code}`,
     followTitle: "Obserwuj znajomego",
     followHelp: "Dostawaj krótkie podsumowanie czyjegoś tygodnia. Ta osoba musi się najpierw zgodzić.",
     follow: "Poproś",

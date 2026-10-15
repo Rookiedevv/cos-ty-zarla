@@ -43,7 +43,7 @@ export function EmailReportSettings({ prefs, configured }: { prefs: Partial<Reco
       const r = await sendTestReportAction();
       if (r.ok) setResult({ tone: "info", text: t.testSent(r.to) });
       else if (r.error === "not_configured") setResult({ tone: "warn", text: t.testNotSetup });
-      else if (/auth|535|534|credentials|password/i.test(r.error)) setResult({ tone: "warn", text: t.testAuth });
+      else if (/auth|535|534|credentials|password/i.test(r.error)) setResult({ tone: "warn", text: t.testAuth(r.sender ?? "?", r.error) });
       else setResult({ tone: "warn", text: t.testFailed(r.error) });
     });
 
@@ -77,7 +77,7 @@ export function EmailReportSettings({ prefs, configured }: { prefs: Partial<Reco
           <Button variant="ghost" className="w-full" disabled={testing} onClick={sendTest}>
             {testing ? t.testSending : t.testSend}
           </Button>
-          {result && <Notice tone={result.tone}>{result.text}</Notice>}
+          {result && <Notice tone={result.tone}><span className="break-words">{result.text}</span></Notice>}
         </div>
       )}
     </Panel>

@@ -182,7 +182,11 @@ export async function runReports(admin: SupabaseClient, profile: Profile, now: D
  * weekly report for the last 7 days, emailed now with "TEST" in the subject.
  * Nothing is saved to History.
  */
-export async function sendTestReports(admin: SupabaseClient, profile: Profile, now: Date): Promise<{ ok: true; to: string } | { ok: false; error: string }> {
+export async function sendTestReports(
+  admin: SupabaseClient,
+  profile: Profile,
+  now: Date,
+): Promise<{ ok: true; to: string } | { ok: false; error: string; sender?: string }> {
   const { emailConfigured, sendEmailDetailed } = await import("../email");
   if (!emailConfigured()) return { ok: false, error: "not_configured" };
   const today = localDate(now, profile.timezone);
@@ -202,7 +206,8 @@ export async function sendTestReports(admin: SupabaseClient, profile: Profile, n
 
   for (const mail of [renderDaily(profile.language, daily, dailyAi, reportsUrl()), renderWeekly(profile.language, weekly, weeklyAi, reportsUrl())]) {
     const r = await sendEmailDetailed({ to: profile.email, ...mail, subject: `TEST · ${mail.subject}` });
-    if (!r.ok) return r;
+    // The sender address isn't secret; showing it helps spot a typo in GMAIL_USER.
+    if (!r.ok) return { ...r, sender: process.env.GMAIL_USER || process.env.EMAIL_FROM };
   }
   return { ok: true, to: profile.email };
 }

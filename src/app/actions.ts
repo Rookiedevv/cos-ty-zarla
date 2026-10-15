@@ -648,7 +648,7 @@ export async function removeFollow(followerId: string, followeeId: string): Prom
 }
 
 /** Emails a test daily + weekly report to the signed-in person right now. */
-export async function sendTestReportAction(): Promise<{ ok: true; to: string } | { ok: false; error: string }> {
+export async function sendTestReportAction(): Promise<{ ok: true; to: string } | { ok: false; error: string; sender?: string }> {
   const { profile } = await requireOnboardedUserForAction();
   const { createAdminClient } = await import("@/lib/supabase/admin");
   const { sendTestReports } = await import("@/lib/reports/run");
