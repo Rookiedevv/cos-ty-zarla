@@ -182,7 +182,11 @@ After every confirmed meal, the AI adds a **one-line verdict** on how the meal f
 - The user types or dictates (🎤, browser speech recognition, Polish) the ingredients and how the dish was cooked, and picks the number of portions (1–12).
 - One AI call returns the whole dish's ingredients with amounts and kcal, accounting for cooking (frying fat, dry vs cooked weight), plus a short note of the biggest guesses.
 - Shows kcal per portion, the whole dish total and the ingredient list. Changing portions recalculates without a new AI call.
-- v1 saves nothing (no meal, no recipe); only the AI cost goes to `ai_usage` (purpose `recipe`) and counts toward the monthly limit.
+- The AI also estimates the cooked weight of the whole dish, shown as grams per portion.
+- **Save recipe** (optional, name editable). Saved recipes are shared by everyone in the app; only the person who saved one can rename or delete it. Anyone can hide other people's recipes from their own lists (shown again from "Hidden").
+- The Przepis screen has two tabs: **Nowy** (calculator) and **Zapisane** (saved list with ingredients per recipe).
+- **Logging a meal from a recipe:** the Log meal screen offers "Own meal" or "From a recipe". After picking a recipe the user adds a photo and/or text ("half a portion", "full plate plus salad"); the AI uses the recipe's per-portion kcal and cooked weight as the reference and returns the recipe portion as one item plus anything extra. Then the normal questions, editable draft and save. The meal keeps a link to the recipe.
+- Calculating and logging from a recipe each cost one AI call (`ai_usage` purposes `recipe`, `meal_recipe`); saving and browsing are free.
 
 ### 7.4 Other
 - **Water:** quick-add buttons (+250 / +500 ml, custom).

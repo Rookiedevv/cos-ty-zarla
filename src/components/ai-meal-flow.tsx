@@ -5,6 +5,7 @@ import { useRef, useState, useTransition } from "react";
 import { estimateMealAction, logMeal, type EstimateResponse } from "@/app/actions";
 import type { Estimate } from "@/lib/ai/estimate";
 import { preparePhoto, type PreparedPhoto } from "@/lib/client/photo";
+import { gramsPerPortion, perPortion, type SavedRecipe } from "@/lib/recipes";
 import { useT } from "@/lib/i18n/client";
 import { LogMealForm } from "./log-meal-form";
 import { LongWait, WaitFailed, withTimeout } from "./long-wait";
@@ -41,10 +42,13 @@ const num = (s: string) => Number(s.replace(",", ".")) || 0;
 export function AiMealFlow({
   today,
   showProtein,
+  recipes = [],
   initial,
 }: {
   today: string;
   showProtein: boolean;
+  /** Saved recipes this person can log from (hidden ones left out). */
+  recipes?: SavedRecipe[];
   /** Start at a given step with an existing estimate (used for previews). */
   initial?: { stage: Stage; estimate: Estimate };
 }) {
@@ -54,6 +58,10 @@ export function AiMealFlow({
   const [stage, setStage] = useState<Stage>(initial?.stage ?? "input");
   const [photo, setPhoto] = useState<PreparedPhoto | null>(null);
   const [text, setText] = useState("");
+  const [mode, setMode] = useState<"own" | "recipe">("own");
+  const [recipeId, setRecipeId] = useState<string | null>(null);
+  const recipe = mode === "recipe" ? (recipes.find((r) => r.id === recipeId) ?? null) : null;
+  const refGrams = recipe ? gramsPerPortion(recipe) : null;
   const [round, setRound] = useState(1);
   const [estimate, setEstimate] = useState<Estimate | null>(initial?.estimate ?? null);
   const [answers, setAnswers] = useState<{ question: string; answer: string }[]>([]);
@@ -86,7 +94,7 @@ export function AiMealFlow({
   };
 
   const errorText = (r: Extract<EstimateResponse, { ok: false }>) =>
-    r.error === "ai_paused" ? ai.paused : r.error === "not_configured" ? ai.notConfigured : r.error === "invalid" ? ai.needInput : ai.failed;
+    r.error === "ai_paused" ? ai.paused : r.error === "not_configured" ? ai.notConfigured : r.error === "invalid" ? (recipe ? ai.needRecipeInput : ai.needInput) : ai.failed;
 
   const runEstimate = (nextRound: number, allAnswers: { question: string; answer: string }[]) => {
     const id = ++attempt.current;
@@ -101,6 +109,7 @@ export function AiMealFlow({
           barcodes: photo?.barcodes ?? [],
           answers: allAnswers,
           round: nextRound,
+          recipe_id: recipe?.id,
         }),
       );
       if (id !== attempt.current) return;
@@ -159,6 +168,7 @@ export function AiMealFlow({
         verdict: estimate?.verdict,
         ai_draft: estimate ?? undefined,
         photo: photo ? { data: photo.data, mediaType: photo.mediaType } : undefined,
+        recipe_id: recipe?.id,
         ...whenPayload(when),
       }));
       if (r !== "timeout" && r.ok) router.push("/");
@@ -187,6 +197,61 @@ export function AiMealFlow({
 
       {stage === "input" && (
         <Panel className="space-y-5">
+          <div role="radiogroup" className="grid grid-cols-2 gap-1 rounded-2xl bg-grout p-1">
+            {(["own", "recipe"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={mode === m}
+                onClick={() => {
+                  setMode(m);
+                  setNotice(null);
+                }}
+                className={`min-h-11 rounded-xl px-2 font-semibold ${mode === m ? "bg-enamel text-ink shadow-[var(--panel-shadow)]" : "text-ink-soft hover:text-ink"}`}
+              >
+                {m === "own" ? ai.modeOwn : ai.modeRecipe}
+              </button>
+            ))}
+          </div>
+
+          {mode === "recipe" && !recipes.length && <p className="text-ink-soft">{ai.noRecipes}</p>}
+
+          {mode === "recipe" && recipes.length > 0 && !recipe && (
+            <fieldset>
+              <legend className="mb-2 font-semibold">{ai.pickRecipe}</legend>
+              <ul className="space-y-2">
+                {recipes.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      onClick={() => setRecipeId(r.id)}
+                      className="menu-row w-full rounded-xl border-2 border-grout bg-enamel px-3 py-2 text-left hover:border-outline"
+                    >
+                      <span className="min-w-0 font-semibold">{r.name}</span>
+                      <span className="leader" aria-hidden />
+                      <span className="value whitespace-nowrap text-sm">
+                        {fmt(perPortion(r))} {t.common.kcal}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
+          )}
+
+          {recipe && (
+            <div className="space-y-1 rounded-xl bg-tile px-3 py-2">
+              <p className="font-semibold">{recipe.name}</p>
+              <p className="text-sm text-ink-soft">{ai.recipeRef(fmt(perPortion(recipe)), refGrams ? fmt(refGrams) : null)}</p>
+              <button type="button" className="min-h-11 text-sm font-semibold text-accent underline underline-offset-4" onClick={() => setRecipeId(null)}>
+                {ai.changeRecipe}
+              </button>
+            </div>
+          )}
+
+          {(mode === "own" || recipe) && (
+          <>
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
           <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
 
@@ -214,13 +279,21 @@ export function AiMealFlow({
             </div>
           )}
 
-          <Field label={ai.describeLabel} hint={photo ? ai.describeOptional : undefined}>
-            <textarea className={`${inputClass} min-h-24`} value={text} onChange={(e) => setText(e.target.value)} placeholder={ai.describePlaceholder} maxLength={1500} />
+          <Field label={recipe ? ai.recipeAmountLabel : ai.describeLabel} hint={photo && !recipe ? ai.describeOptional : undefined}>
+            <textarea
+              className={`${inputClass} min-h-24`}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={recipe ? ai.recipeAmountPlaceholder : ai.describePlaceholder}
+              maxLength={1500}
+            />
           </Field>
 
           <Button className="w-full" loading={estimating} disabled={preparing || (!photo && !text.trim())} onClick={() => runEstimate(1, [])}>
             {estimating ? ai.estimating : ai.estimate}
           </Button>
+          </>
+          )}
           <Button variant="quiet" className="w-full" onClick={() => setStage("manual")}>
             {ai.manual}
           </Button>

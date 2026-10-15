@@ -13,6 +13,8 @@ export interface RecipeItem {
 export interface RecipeEstimate {
   name: string;
   items: RecipeItem[];
+  /** Estimated weight of the whole cooked dish, so a portion can be judged on a plate. */
+  cooked_weight_g: number;
   /** What the AI assumed (amounts it guessed, fat absorbed, etc.). */
   assumptions: string;
 }
@@ -25,7 +27,7 @@ export interface RecipeInput {
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["name", "items", "assumptions"],
+  required: ["name", "items", "cooked_weight_g", "assumptions"],
   properties: {
     name: { type: "string", description: "Short name of the dish, e.g. 'Spaghetti bolognese'." },
     items: {
@@ -44,6 +46,7 @@ const SCHEMA = {
         },
       },
     },
+    cooked_weight_g: { type: "integer", description: "Estimated weight of the whole finished dish in grams, after cooking." },
     assumptions: { type: "string" },
   },
 } as const;
@@ -56,6 +59,7 @@ function systemPrompt(input: RecipeInput): string {
     "Return one item per ingredient with the amount used in the WHOLE recipe (not per portion), its kcal and protein. Use the raw/dry weight the person gives (e.g. 500 g dry pasta, 1 kg raw chicken).",
     "When an amount is missing, assume a typical Polish home-cooking amount and set confidence low. Spoons: 1 tbsp oil ≈ 10 g, 1 tbsp butter ≈ 15 g, 1 tbsp flour ≈ 10 g, 1 tbsp sugar ≈ 15 g.",
     "Account for the cooking process: fat for frying counts in full unless the person says it was drained or discarded; deep-frying absorbs only part of the oil; water and cooking evaporation add no calories; fat skimmed off broth reduces it.",
+    "cooked_weight_g: estimate the weight of the whole finished dish after cooking (pasta and rice roughly double or triple, meat loses about a quarter, water in soups and stews counts, frying fat stays). 0 if it can't be judged.",
     "Ignore water, salt, pepper and dried herbs unless large amounts; leave out items with no meaningful calories.",
     "If the text clearly isn't a dish or ingredients, return no items and explain briefly in assumptions.",
     "assumptions: at most two short sentences naming the biggest guesses you made (amounts you assumed, how you treated the frying fat). Empty string if nothing important was guessed.",
@@ -104,6 +108,7 @@ export function sanitizeRecipe(e: RecipeEstimate): RecipeEstimate {
       protein_g: Math.round(clamp(i.protein_g, 0, 2000) * 10) / 10,
       confidence: i.confidence === "high" || i.confidence === "low" ? i.confidence : "medium",
     })),
+    cooked_weight_g: Math.round(clamp(e.cooked_weight_g, 0, 50000)),
     assumptions: String(e.assumptions ?? "").slice(0, 400),
   };
 }

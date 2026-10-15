@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
-import { estimateRecipeAction, type RecipeResponse } from "@/app/actions";
+import { estimateRecipeAction, saveRecipe, type RecipeResponse } from "@/app/actions";
 import type { RecipeEstimate } from "@/lib/ai/recipe";
 import { useDictation } from "@/lib/client/dictation";
 import { useLang, useT } from "@/lib/i18n/client";
@@ -53,6 +54,29 @@ export function RecipeFlow({ showProtein, initial }: { showProtein: boolean; ini
   const [attemptKey, setAttemptKey] = useState(0);
   const [retry, setRetry] = useState<(() => void) | null>(null);
   const mic = useDictation({ lang, value: text, onChange: setText });
+  const [saveName, setSaveName] = useState(initial?.name ?? "");
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [saving, startSave] = useTransition();
+
+  const save = () => {
+    if (!result) return;
+    startSave(async () => {
+      setSaveError(false);
+      const res = await withTimeout(
+        saveRecipe({
+          name: saveName.trim() || result.name,
+          description: text.trim() || result.name,
+          portions,
+          items: result.items,
+          cooked_weight_g: result.cooked_weight_g,
+          assumptions: result.assumptions,
+        }),
+      );
+      if (res !== "timeout" && res.ok) setSaved(true);
+      else setSaveError(true);
+    });
+  };
 
   const errorText = (e: Extract<RecipeResponse, { ok: false }>["error"]) =>
     e === "ai_paused" ? r.paused : e === "not_configured" ? r.notConfigured : e === "invalid" ? r.needInput : r.failed;
@@ -74,6 +98,9 @@ export function RecipeFlow({ showProtein, initial }: { showProtein: boolean; ini
       if (!res.ok) return setNotice(errorText(res.error));
       if (res.estimate.items.length === 0) return setNotice(res.estimate.assumptions || r.notFood);
       setResult(res.estimate);
+      setSaveName(res.estimate.name);
+      setSaved(false);
+      setSaveError(false);
     });
   };
 
@@ -81,8 +108,7 @@ export function RecipeFlow({ showProtein, initial }: { showProtein: boolean; ini
   const protein = result?.items.reduce((s, i) => s + i.protein_g, 0) ?? 0;
 
   return (
-    <main className="space-y-4 pt-2">
-      <h1 className="board text-3xl">{r.title}</h1>
+    <div className="space-y-4">
       {notice && <Notice tone="warn">{notice}</Notice>}
       {estimating && <LongWait key={attemptKey} steps={t.wait.recipe} expectedSec={9} />}
       {retry && !estimating && <WaitFailed onRetry={retry} />}
@@ -141,6 +167,7 @@ export function RecipeFlow({ showProtein, initial }: { showProtein: boolean; ini
               {fmt(total / portions)} <span className="text-2xl">{t.common.kcal}</span>
             </p>
             <p className="font-semibold">{r.perPortion}</p>
+            {result.cooked_weight_g > 0 && <p className="text-sm text-ink-soft">{r.gramsPerPortion(fmt(result.cooked_weight_g / portions))}</p>}
             {showProtein && <p className="mt-1 text-sm text-ink-soft">{r.proteinPerPortion(dec(lang, protein / portions, 0))}</p>}
           </div>
 
@@ -173,6 +200,27 @@ export function RecipeFlow({ showProtein, initial }: { showProtein: boolean; ini
             </ul>
           </div>
 
+          <div className="space-y-2 rounded-xl border-2 border-grout p-3">
+            {saved ? (
+              <div className="space-y-2">
+                <p role="status" className="font-semibold text-good">✓ {r.savedNotice}</p>
+                <Link href="/recipe?tab=saved" className="font-semibold text-accent underline underline-offset-4">
+                  {r.seeSaved}
+                </Link>
+              </div>
+            ) : (
+              <>
+                <Field label={r.saveName}>
+                  <input className={inputClass} value={saveName} onChange={(e) => setSaveName(e.target.value)} maxLength={200} />
+                </Field>
+                <Button className="w-full" loading={saving} disabled={!saveName.trim()} onClick={save}>
+                  {saving ? t.common.saving : r.save}
+                </Button>
+                {saveError && <p role="alert" className="text-sm text-kompot">{r.saveFailed}</p>}
+              </>
+            )}
+          </div>
+
           <Button variant="ghost" className="w-full" onClick={() => setResult(null)}>
             {r.edit}
           </Button>
@@ -189,6 +237,6 @@ export function RecipeFlow({ showProtein, initial }: { showProtein: boolean; ini
           </Button>
         </Panel>
       )}
-    </main>
+    </div>
   );
 }

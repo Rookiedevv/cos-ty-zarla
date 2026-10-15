@@ -40,7 +40,7 @@ NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_
 After changing any of them: Vercel → Deployments → ⋮ → Redeploy.
 
 ## Database migrations
-`supabase/migrations/*.sql`, run **by hand** in the Supabase SQL editor, in order (000001 … 000007 so far, all applied).
+`supabase/migrations/*.sql`, run **by hand** in the Supabase SQL editor, in order (000001 … 000008 so far, all applied).
 A new migration = give Robert the full SQL to paste plus the editor link (`https://supabase.com/dashboard/project/<ref>/sql/new`; the ref is in NEXT_PUBLIC_SUPABASE_URL).
 RLS tests in `supabase/tests/*.sql` run on a plain local Postgres with `stub_supabase.sql` (skip the storage migration locally).
 
@@ -54,7 +54,9 @@ RLS tests in `supabase/tests/*.sql` run on a plain local Postgres with `stub_sup
 ## Features (all live)
 - Today: target with breakdown, morning check-in (sleep + workout plan, or rest day), meals, water, weigh-in, diet reminder card.
 - Meal logging: photo/barcode/text → AI estimate with up to 3 rounds of follow-up questions → editable items → save. Photos are deleted after 90 days; descriptions are kept.
-- Recipe calculator ("Przepis" tab, `/recipe`, `src/components/recipe-flow.tsx`, `src/lib/ai/recipe.ts`): text or dictated ingredients + method (🎤 via Web Speech API, `src/lib/client/dictation.ts`; hidden when unsupported) → portions → kcal per portion. Saves nothing; AI cost logged as purpose `recipe`.
+- Recipe calculator ("Przepis" tab, `/recipe`, tabs Nowy / Zapisane; `src/components/recipe-flow.tsx`, `saved-recipes.tsx`, `src/lib/ai/recipe.ts`): text or dictated ingredients + method (🎤 via Web Speech API, `src/lib/client/dictation.ts`; hidden when unsupported) → portions → kcal and estimated cooked grams per portion → optional "Zapisz przepis". AI cost logged as purpose `recipe`.
+- Saved recipes (`recipes` table, migration 000008): **shared**. Everyone reads all, only the owner renames/deletes (RLS). Each person can hide others' recipes (`recipe_hides`); hidden ones sit under "Ukryte". Owner names via admin client (`src/lib/recipes-server.ts`).
+- Meal from a recipe: on `/log`, "Własny posiłek" / "Z przepisu". The chosen recipe (per-portion kcal, protein, cooked grams, ingredients) is sent to the meal AI as the reference; the AI judges how much was eaten from the photo/text and returns the recipe as one item plus any extras. `meals.recipe_id` (set null if the recipe is deleted). AI purpose `meal_recipe`.
 - Meals and workouts: tap to expand (full name, items, AI verdict, delete).
 - History tabs: Posiłki (30 days, kcal vs target with a coloured dot, accordion per day), Waga (chart + list + delete), Raporty.
 - Settings tabs: **Dieta** (weight, plan form, report emails + test button, follow a friend, cheatsheets) and **Konto i aplikacja** (reminders, watch, AI costs [admin], allow-list [admin], sign out). Keep this split.
@@ -69,7 +71,7 @@ RLS tests in `supabase/tests/*.sql` run on a plain local Postgres with `stub_sup
 ## Open issues / ideas (ask before doing any)
 - **Watch sleep shows "0 min snu".** Either Samsung Health isn't writing Sleep to Health Connect, or `HealthReader.kt` reads the aggregate badly. Proposed: read SleepSessionRecords (main sleep ending this morning, minus awake stages), add a diagnostic line in Żarła Sync, distinguish "no data" from 0, and use watch sleep even after check-in. Waiting for Robert to check Health Connect → Sen.
 - Undecided: keep the AI cost panel? Add a "clear my data" button?
-- Recipe calculator ideas for later: log a portion as a meal, save recipes for reuse, edit ingredients before calculating.
+- Recipe ideas for later: edit the ingredients of a saved recipe, quick-log "1 portion" without AI, show in History which meals came from a recipe.
 - Not built yet: fasting timer, 5:2 weekly check, adaptive burn from weigh-ins (`burn_adjust`), trends screen, editing a saved meal, cost alerts by email (sender now exists).
 - Report emails land in Spam at first; users mark "Not spam" and add the sender to contacts.
 

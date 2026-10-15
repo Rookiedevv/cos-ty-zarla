@@ -262,6 +262,7 @@ const mealSchema = z.object({
   when: z.enum(["now", "m30", "h1", "h2", "h3", "custom"]),
   custom_date: z.iso.date().optional(),
   custom_time: time.optional(),
+  recipe_id: z.uuid().optional(),
 });
 
 const WHEN_MINUTES = { now: 0, m30: 30, h1: 60, h2: 120, h3: 180 } as const;
@@ -317,6 +318,7 @@ export async function logMeal(input: z.input<typeof mealSchema>): Promise<Action
     ai_draft: v.ai_draft ?? null,
     photo_path: photoPath,
     outside_window: outside,
+    ...(v.recipe_id ? { recipe_id: v.recipe_id } : {}),
   });
   if (error) return fail(error.message);
 
@@ -351,6 +353,7 @@ const estimateSchema = z.object({
   barcodes: z.array(z.string().regex(/^\d{8,14}$/)).max(3).default([]),
   answers: z.array(z.object({ question: z.string().max(300), answer: z.string().max(300) })).max(9).default([]),
   round: z.number().int().min(1).max(3),
+  recipe_id: z.uuid().optional(),
 });
 
 export type EstimateResponse =
@@ -359,7 +362,7 @@ export type EstimateResponse =
 
 /** Photo and/or text in, an editable estimate (and maybe follow-up questions) out. */
 export async function estimateMealAction(input: z.input<typeof estimateSchema>): Promise<EstimateResponse> {
-  const { profile } = await requireUser();
+  const { supabase, profile } = await requireUser();
   const parsed = estimateSchema.safeParse(input);
   if (!parsed.success || (!parsed.data.photo && !parsed.data.text?.trim() && !parsed.data.barcodes.length)) {
     return { ok: false, error: "invalid" };
@@ -378,8 +381,27 @@ export async function estimateMealAction(input: z.input<typeof estimateSchema>):
 
   const products = (await Promise.all([...new Set(v.barcodes)].map(lookupBarcode))).filter((p) => p != null);
 
+  let recipe: import("@/lib/ai/estimate").RecipeRef | undefined;
+  if (v.recipe_id) {
+    const { data } = await supabase
+      .from("recipes")
+      .select("name, portions, total_kcal, total_protein_g, cooked_weight_g, items")
+      .eq("id", v.recipe_id)
+      .maybeSingle();
+    if (!data) return { ok: false, error: "invalid" };
+    recipe = {
+      name: data.name as string,
+      portions: Number(data.portions),
+      total_kcal: Number(data.total_kcal),
+      total_protein_g: data.total_protein_g == null ? null : Number(data.total_protein_g),
+      cooked_weight_g: data.cooked_weight_g == null ? null : Number(data.cooked_weight_g),
+      ingredients: ((data.items ?? []) as { name: string }[]).map((i) => i.name),
+    };
+  }
+
   try {
     const call = await estimateMeal({
+      recipe,
       photo: v.photo,
       text: v.text,
       products,
@@ -392,7 +414,7 @@ export async function estimateMealAction(input: z.input<typeof estimateSchema>):
     await admin.from("ai_usage").insert({
       user_id: profile.id,
       model: call.model,
-      purpose: v.photo ? "meal_photo" : "meal_text",
+      purpose: recipe ? "meal_recipe" : v.photo ? "meal_photo" : "meal_text",
       tokens_in: call.tokensIn,
       tokens_out: call.tokensOut,
       cost_usd: costOf(call.model, call.tokensIn, call.tokensOut),
@@ -442,6 +464,94 @@ export async function estimateRecipeAction(input: { text: string }): Promise<Rec
     console.error("recipe estimate failed", e);
     return { ok: false, error: (e as Error).message === "NO_API_KEY" ? "not_configured" : "failed" };
   }
+}
+
+const recipeItemSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  amount: z.number().min(0).max(20000),
+  unit: z.enum(["g", "ml", "pcs"]),
+  kcal: z.number().int().min(0).max(20000),
+  protein_g: z.number().min(0).max(2000),
+  confidence: z.enum(["high", "medium", "low"]),
+});
+
+const saveRecipeSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().min(1).max(3000),
+  portions: z.number().int().min(1).max(12),
+  items: z.array(recipeItemSchema).min(1).max(40),
+  cooked_weight_g: z.number().int().min(0).max(50000),
+  assumptions: z.string().max(400),
+});
+
+/** Saves a calculated recipe for everyone to use. Totals are worked out here from the items. */
+export async function saveRecipe(input: z.input<typeof saveRecipeSchema>): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const { supabase, profile } = await requireUser();
+  const parsed = saveRecipeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const v = parsed.data;
+  const totalKcal = v.items.reduce((s, i) => s + i.kcal, 0);
+  if (totalKcal > 50000) return { ok: false, error: "invalid" };
+  const { data, error } = await supabase
+    .from("recipes")
+    .insert({
+      user_id: profile.id,
+      name: v.name,
+      description: v.description,
+      portions: v.portions,
+      total_kcal: totalKcal,
+      total_protein_g: Math.round(v.items.reduce((s, i) => s + i.protein_g, 0) * 10) / 10,
+      cooked_weight_g: v.cooked_weight_g || null,
+      items: v.items,
+      assumptions: v.assumptions || null,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { ok: false, error: error?.message ?? "failed" };
+  revalidatePath("/recipe");
+  revalidatePath("/log");
+  return { ok: true, id: data.id as string };
+}
+
+export async function renameRecipe(id: string, name: string): Promise<ActionResult> {
+  const { supabase, profile } = await requireUser();
+  const parsed = z.object({ id: z.uuid(), name: z.string().trim().min(1).max(200) }).safeParse({ id, name });
+  if (!parsed.success) return fail("invalid");
+  const { data, error } = await supabase
+    .from("recipes")
+    .update({ name: parsed.data.name, updated_at: new Date().toISOString() })
+    .eq("id", parsed.data.id)
+    .eq("user_id", profile.id)
+    .select("id");
+  if (error) return fail(error.message);
+  if (!data?.length) return fail("not_yours");
+  revalidatePath("/recipe");
+  revalidatePath("/log");
+  return { ok: true };
+}
+
+export async function deleteRecipe(id: string): Promise<ActionResult> {
+  const { supabase, profile } = await requireUser();
+  if (!z.uuid().safeParse(id).success) return fail("invalid");
+  const { data, error } = await supabase.from("recipes").delete().eq("id", id).eq("user_id", profile.id).select("id");
+  if (error) return fail(error.message);
+  if (!data?.length) return fail("not_yours");
+  revalidatePath("/recipe");
+  revalidatePath("/log");
+  return { ok: true };
+}
+
+/** Hide or show someone else's recipe in your own lists. */
+export async function setRecipeHidden(id: string, hidden: boolean): Promise<ActionResult> {
+  const { supabase, profile } = await requireUser();
+  if (!z.uuid().safeParse(id).success) return fail("invalid");
+  const { error } = hidden
+    ? await supabase.from("recipe_hides").upsert({ user_id: profile.id, recipe_id: id }, { onConflict: "user_id,recipe_id", ignoreDuplicates: true })
+    : await supabase.from("recipe_hides").delete().eq("user_id", profile.id).eq("recipe_id", id);
+  if (error) return fail(error.message);
+  revalidatePath("/recipe");
+  revalidatePath("/log");
+  return { ok: true };
 }
 
 export async function deleteMeal(id: string): Promise<ActionResult> {

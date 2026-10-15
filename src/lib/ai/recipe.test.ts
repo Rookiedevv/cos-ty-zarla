@@ -36,6 +36,7 @@ describe("estimateRecipe against a mock Claude API", () => {
         { name: "Mięso mielone wołowe", amount: 500, unit: "g", kcal: 1250, protein_g: 95, confidence: "high" },
         { name: "Oliwa", amount: 20, unit: "ml", kcal: 177, protein_g: 0, confidence: "low" },
       ],
+      cooked_weight_g: 2100,
       assumptions: "Przyjęłam 2 łyżki oliwy do smażenia.",
     };
     const { estimateRecipe } = await import("./recipe");
@@ -52,6 +53,8 @@ describe("estimateRecipe against a mock Claude API", () => {
     expect(call.estimate.items).toHaveLength(3);
     expect(call.estimate.items.reduce((s, i) => s + i.kcal, 0)).toBe(3207);
     expect(call.estimate.assumptions).toContain("oliwy");
+    expect(call.estimate.cooked_weight_g).toBe(2100);
+    expect(String(lastBody!.system)).toContain("cooked_weight_g");
   });
 
   it("clamps silly numbers and unknown units", async () => {
@@ -59,8 +62,10 @@ describe("estimateRecipe against a mock Claude API", () => {
     const s = sanitizeRecipe({
       name: "x",
       items: [{ name: "", amount: -5, unit: "kg" as "g", kcal: 99999, protein_g: Number.NaN, confidence: "sure" as "high" }],
+      cooked_weight_g: -3,
       assumptions: "",
     });
+    expect(s.cooked_weight_g).toBe(0);
     expect(s.items[0]).toEqual({ name: "?", amount: 0, unit: "g", kcal: 20000, protein_g: 0, confidence: "medium" });
   });
 });

@@ -27,7 +27,18 @@ export interface Estimate {
   verdict: string;
 }
 
+/** A saved recipe the meal came from: the AI judges how much of it was eaten. */
+export interface RecipeRef {
+  name: string;
+  portions: number;
+  total_kcal: number;
+  total_protein_g: number | null;
+  cooked_weight_g: number | null;
+  ingredients: string[];
+}
+
 export interface EstimateInput {
+  recipe?: RecipeRef;
   photo?: { data: string; mediaType: "image/jpeg" | "image/png" | "image/webp" };
   text?: string;
   products: Product[];
@@ -108,6 +119,13 @@ function systemPrompt(input: EstimateInput): string {
     lastRound
       ? "Do not ask any questions. Give your best estimate with what you have."
       : "Ask up to 3 short questions only when the answer would change the total by more than about 15% (portion eaten, cooking fat, sauce, sugar in drinks, whether the whole package was eaten). Give each 2–4 short answer options. If the estimate is already good, return no questions.",
+    ...(input.recipe
+      ? [
+          "This meal is (at least partly) a saved home recipe described below. Use the recipe's per-portion calories and cooked weight as the reference: judge from the photo and/or the text how much of the dish was eaten (e.g. half a portion, one portion, 1.5 portions).",
+          "Return the recipe part as ONE item named after the recipe, with amount = grams eaten (unit g) when the cooked weight is known, otherwise amount = portions eaten (unit pcs), and kcal and protein in proportion to the recipe's values. Add separate items only for food that isn't part of the recipe (a side salad, bread, a drink).",
+          "If nothing tells you the amount, assume one portion. Only ask about the amount if the photo and text truly leave it open.",
+        ]
+      : []),
     "If the input clearly isn't food, return no items and set description to explain that briefly.",
     `The person follows: ${METHOD_LABEL[input.method]}; food focus: ${FOCUS_LABEL[input.focus]}.`,
     "verdict: one sentence on how this meal fits that diet. If it clearly breaks the diet, be firm and direct, name the specific item and why (e.g. 'This doesn't fit keto: the dough alone is about 80 g of carbs.'). Never insult or shame. If it fits, say so briefly.",
@@ -119,8 +137,19 @@ function userContent(input: EstimateInput): Anthropic.ContentBlockParam[] {
   const blocks: Anthropic.ContentBlockParam[] = [];
   if (input.photo) blocks.push({ type: "image", source: { type: "base64", media_type: input.photo.mediaType, data: input.photo.data } });
   const lines: string[] = [];
+  const r = input.recipe;
+  if (r) {
+    const perKcal = Math.round(r.total_kcal / r.portions);
+    const perGrams = r.cooked_weight_g ? Math.round(r.cooked_weight_g / r.portions) : null;
+    const perProtein = r.total_protein_g != null ? Math.round((r.total_protein_g / r.portions) * 10) / 10 : null;
+    lines.push(
+      `Saved recipe "${r.name}": the whole dish is ${r.total_kcal} kcal${r.cooked_weight_g ? ` and about ${r.cooked_weight_g} g cooked` : ""}, split into ${r.portions} portions.` +
+        ` One portion = ${perKcal} kcal${perGrams ? `, about ${perGrams} g` : ""}${perProtein != null ? `, ${perProtein} g protein` : ""}.` +
+        (r.ingredients.length ? ` Ingredients: ${r.ingredients.slice(0, 25).join(", ")}.` : ""),
+    );
+  }
   if (input.text?.trim()) lines.push(`The person describes the meal: "${input.text.trim().slice(0, 1500)}"`);
-  else if (input.photo) lines.push("Estimate the meal in the photo.");
+  else if (input.photo) lines.push(r ? "Judge from the photo how much of the recipe is on the plate." : "Estimate the meal in the photo.");
   for (const p of input.products) {
     lines.push(
       `Barcode product: ${p.name}${p.brand ? ` (${p.brand})` : ""}; ${p.kcalPer100 ?? "?"} kcal and ${p.proteinPer100 ?? "?"} g protein per 100 g` +

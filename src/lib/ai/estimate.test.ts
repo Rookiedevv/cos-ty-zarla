@@ -72,4 +72,30 @@ describe("estimateMeal against a mock Claude API", () => {
     expect(String(lastBody!.system)).toContain("Do not ask any questions");
     expect(call.estimate.questions).toEqual([]);
   });
+
+  it("gives the AI the saved recipe's portion as the reference", async () => {
+    const { estimateMeal } = await import("./estimate");
+    await estimateMeal({
+      recipe: { name: "Bigos", portions: 6, total_kcal: 3600, total_protein_g: 180, cooked_weight_g: 2400, ingredients: ["Kapusta kiszona", "Kiełbasa"] },
+      text: "pół porcji",
+      products: [],
+      answers: [],
+      round: 1,
+      language: "pl",
+      method: "none",
+      focus: "balanced",
+    });
+    const text = (lastBody!.messages as { content: { type: string; text?: string }[] }[])[0].content[0].text!;
+    expect(text).toContain('Saved recipe "Bigos"');
+    expect(text).toContain("One portion = 600 kcal, about 400 g, 30 g protein");
+    expect(text).toContain("Kapusta kiszona, Kiełbasa");
+    expect(text).toContain("pół porcji");
+    expect(String(lastBody!.system)).toContain("ONE item named after the recipe");
+  });
+
+  it("leaves recipe instructions out for an ordinary meal", async () => {
+    const { estimateMeal } = await import("./estimate");
+    await estimateMeal({ text: "jajecznica", products: [], answers: [], round: 1, language: "pl", method: "none", focus: "balanced" });
+    expect(String(lastBody!.system)).not.toContain("saved home recipe");
+  });
 });
