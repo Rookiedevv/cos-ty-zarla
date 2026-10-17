@@ -9,7 +9,25 @@ export interface ReportMeal {
   items: { name: string; amount: number | null; unit: string | null; kcal: number }[];
 }
 
-export interface DailyData {
+/** Why a report has no AI comment. "error" covers outages, timeouts and answers that were cut off or unreadable. */
+export type AiFailure = "budget" | "no_key" | "refused" | "error";
+
+/** Cron runs (5 minutes apart) that try the AI comment before the report goes out without it. */
+export const AI_RUNS = 3;
+
+/** The reason to show for a missing comment: "pending" while more tries are coming. */
+export const aiMissingReason = (d: AiStatus): string | undefined =>
+  d.aiFailure === "error" && (d.aiTries ?? 0) < AI_RUNS ? "pending" : d.aiFailure;
+
+/** Kept in a report's data while its AI comment is missing. */
+export interface AiStatus {
+  /** Why the last try failed. */
+  aiFailure?: AiFailure;
+  /** Cron runs that tried so far. */
+  aiTries?: number;
+}
+
+export interface DailyData extends AiStatus {
   date: string;
   eaten: number;
   target: number | null;
@@ -31,7 +49,7 @@ export interface WeekDay {
   sleepHours: number | null;
 }
 
-export interface WeeklyData {
+export interface WeeklyData extends AiStatus {
   start: string;
   end: string;
   weighInDate: string;

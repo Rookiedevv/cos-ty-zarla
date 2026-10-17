@@ -7,7 +7,7 @@ import { waterTargetMl } from "../engine/target";
 import { siteUrl } from "../notify/push";
 import { hhmm, isoWeekday, minutesOf, type EmailPrefKey, type Profile } from "../profile";
 import { dailyComment, weeklyComment } from "./ai";
-import { dayWasLogged, summarizeWeek, weekFor, type DailyData, type WeeklyData } from "./build";
+import { AI_RUNS, dayWasLogged, summarizeWeek, weekFor, type AiStatus, type DailyData, type WeeklyData } from "./build";
 import { renderDaily, renderFriend, renderWeekly } from "./email";
 
 /** The weekly report goes out at this local time even without a weigh-in. */
@@ -16,6 +16,42 @@ export const WEEKLY_FALLBACK = "21:00";
 const wants = (p: { email_prefs: Profile["email_prefs"] }, key: EmailPrefKey) => (p.email_prefs ?? {})[key] !== false;
 export const displayName = (p: { display_name: string | null; email: string }) => p.display_name?.trim() || p.email.split("@")[0];
 const reportsUrl = () => `${siteUrl()}/history?tab=reports`;
+
+interface ReportRow<D> {
+  id: string;
+  ai: unknown;
+  emailed_at: string | null;
+  data: D;
+}
+
+/** A saved report whose AI comment failed for a passing reason and still has tries left: it waits, unsent. */
+export const waitingForAi = (r: ReportRow<AiStatus>) =>
+  !r.ai && !r.emailed_at && r.data?.aiFailure === "error" && (r.data.aiTries ?? 0) < AI_RUNS;
+
+/**
+ * One cron run's try at the AI comment. Saves the comment, or the reason it failed.
+ * Returns the data to report with, or null when the report should wait for the next run.
+ */
+export async function tryComment<D extends AiStatus, A>(
+  admin: SupabaseClient,
+  rowId: string,
+  data: D,
+  comment: () => Promise<{ ok: true; value: A } | { ok: false; reason: NonNullable<AiStatus["aiFailure"]> }>,
+): Promise<{ data: D; ai: A | null } | null> {
+  // Count the try before making it: if this run is cut off mid-call, the next run picks the report up again.
+  const tries = (data.aiTries ?? 0) + 1;
+  await admin.from("reports").update({ data: { ...data, aiFailure: "error", aiTries: tries } }).eq("id", rowId);
+  const res = await comment();
+  if (res.ok) {
+    const { aiFailure: _f, aiTries: _t, ...clean } = data; // eslint-disable-line @typescript-eslint/no-unused-vars
+    await admin.from("reports").update({ ai: res.value, data: clean }).eq("id", rowId);
+    return { data: clean as D, ai: res.value };
+  }
+  const next = { ...data, aiFailure: res.reason, aiTries: tries };
+  await admin.from("reports").update({ data: next }).eq("id", rowId);
+  if (res.reason === "error" && next.aiTries < AI_RUNS) return null;
+  return { data: next, ai: null };
+}
 
 /** Everything a daily report shows for one day. */
 export async function buildDailyData(admin: SupabaseClient, profile: Profile, day: string, now: Date): Promise<DailyData> {
@@ -85,8 +121,17 @@ export async function runDailyReport(admin: SupabaseClient, profile: Profile, no
   if (minutesOf(localTime(now, profile.timezone)) < minutesOf(hhmm(profile.wake_time))) return "before_wake";
   const day = addDays(today, -1);
 
-  const { data: existing } = await admin.from("reports").select("id").eq("user_id", profile.id).eq("kind", "daily").eq("period_end", day).maybeSingle();
-  if (existing) return "done";
+  const { data: existing } = await admin
+    .from("reports")
+    .select("id, ai, emailed_at, data")
+    .eq("user_id", profile.id)
+    .eq("kind", "daily")
+    .eq("period_end", day)
+    .maybeSingle();
+  if (existing) {
+    const row = existing as ReportRow<DailyData>;
+    return waitingForAi(row) ? finishDaily(admin, profile, row.id, row.data) : "done";
+  }
 
   // Cheap check first, so days without entries don't load the whole day every 5 minutes.
   const [{ count: mealCount }, { data: waterRows }] = await Promise.all([
@@ -103,15 +148,19 @@ export async function runDailyReport(admin: SupabaseClient, profile: Profile, no
     .select("id")
     .single();
   if (error || !row) return "done"; // another run claimed it
+  return finishDaily(admin, profile, row.id as string, data);
+}
 
-  const ai = await dailyComment(admin, profile.id, profile.language, data);
-  if (ai) await admin.from("reports").update({ ai }).eq("id", row.id);
+/** AI comment, then the email. If the AI fails for a passing reason, the email waits for the next run. */
+async function finishDaily(admin: SupabaseClient, profile: Profile, rowId: string, data: DailyData): Promise<string> {
+  const done = await tryComment(admin, rowId, data, () => dailyComment(admin, profile.id, profile.language, data));
+  if (!done) return "waiting_for_ai";
 
   if (wants(profile, "daily")) {
-    const mail = renderDaily(profile.language, data, ai, reportsUrl());
-    if (await sendEmail({ to: profile.email, ...mail })) await admin.from("reports").update({ emailed_at: new Date().toISOString() }).eq("id", row.id);
+    const mail = renderDaily(profile.language, done.data, done.ai, reportsUrl());
+    if (await sendEmail({ to: profile.email, ...mail })) await admin.from("reports").update({ emailed_at: new Date().toISOString() }).eq("id", rowId);
   }
-  return "sent";
+  return done.ai ? "sent" : `sent_without_ai_${done.data.aiFailure}`;
 }
 
 /**
@@ -123,8 +172,17 @@ export async function runWeeklyReport(admin: SupabaseClient, profile: Profile, n
   if (isoWeekday(today) !== profile.weigh_in_dow) return "not_weigh_in_day";
 
   const { start, end } = weekFor(today);
-  const { data: existing } = await admin.from("reports").select("id").eq("user_id", profile.id).eq("kind", "weekly").eq("period_end", end).maybeSingle();
-  if (existing) return "done";
+  const { data: existing } = await admin
+    .from("reports")
+    .select("id, ai, emailed_at, data")
+    .eq("user_id", profile.id)
+    .eq("kind", "weekly")
+    .eq("period_end", end)
+    .maybeSingle();
+  if (existing) {
+    const row = existing as ReportRow<WeeklyData>;
+    return waitingForAi(row) ? finishWeekly(admin, profile, row.id, row.data) : "done";
+  }
 
   const { data: weights } = await admin.from("weights").select("date, kg").eq("user_id", profile.id).lte("date", today).order("date");
   const weighed = (weights ?? []).some((w) => w.date === today);
@@ -138,14 +196,20 @@ export async function runWeeklyReport(admin: SupabaseClient, profile: Profile, n
     .select("id")
     .single();
   if (error || !row) return "done";
+  const result = await finishWeekly(admin, profile, row.id as string, data);
+  return result === "sent" || result.startsWith("sent_") ? (weighed ? result : `${result}_no_weight`) : result;
+}
 
+/** AI comment, the email, then followers. If the AI fails for a passing reason, everything waits for the next run. */
+async function finishWeekly(admin: SupabaseClient, profile: Profile, rowId: string, data: WeeklyData): Promise<string> {
   const name = displayName(profile);
-  const ai = await weeklyComment(admin, profile.id, profile.language, name, profile.sex, data);
-  if (ai) await admin.from("reports").update({ ai }).eq("id", row.id);
+  const done = await tryComment(admin, rowId, data, () => weeklyComment(admin, profile.id, profile.language, name, profile.sex, data));
+  if (!done) return "waiting_for_ai";
+  const ai = done.ai;
 
   if (wants(profile, "weekly")) {
-    const mail = renderWeekly(profile.language, data, ai, reportsUrl());
-    if (await sendEmail({ to: profile.email, ...mail })) await admin.from("reports").update({ emailed_at: new Date().toISOString() }).eq("id", row.id);
+    const mail = renderWeekly(profile.language, done.data, ai, reportsUrl());
+    if (await sendEmail({ to: profile.email, ...mail })) await admin.from("reports").update({ emailed_at: new Date().toISOString() }).eq("id", rowId);
   }
 
   // People who follow this person, with their approval.
@@ -157,10 +221,10 @@ export async function runWeeklyReport(admin: SupabaseClient, profile: Profile, n
       const lang = f.language === "en" ? "en" : "pl";
       // The friend summary is written in the followed person's language; drop it if the follower reads another one.
       const summary = ai && lang === profile.language ? ai.friend_summary : null;
-      await sendEmail({ to: f.email as string, ...renderFriend(lang, name, data, summary, siteUrl()) });
+      await sendEmail({ to: f.email as string, ...renderFriend(lang, name, done.data, summary, siteUrl()) });
     }
   }
-  return weighed ? "sent" : "sent_without_weight";
+  return ai ? "sent" : `sent_without_ai_${done.data.aiFailure}`;
 }
 
 /** Both report jobs for one person; never throws. */
@@ -204,7 +268,11 @@ export async function sendTestReports(
     weeklyComment(admin, profile.id, profile.language, displayName(profile), profile.sex, weekly),
   ]);
 
-  for (const mail of [renderDaily(profile.language, daily, dailyAi, reportsUrl()), renderWeekly(profile.language, weekly, weeklyAi, reportsUrl())]) {
+  const mails = [
+    renderDaily(profile.language, dailyAi.ok ? daily : { ...daily, aiFailure: dailyAi.reason }, dailyAi.ok ? dailyAi.value : null, reportsUrl()),
+    renderWeekly(profile.language, weeklyAi.ok ? weekly : { ...weekly, aiFailure: weeklyAi.reason }, weeklyAi.ok ? weeklyAi.value : null, reportsUrl()),
+  ];
+  for (const mail of mails) {
     const r = await sendEmailDetailed({ to: profile.email, ...mail, subject: `TEST · ${mail.subject}` });
     // The sender address isn't secret; showing it helps spot a typo in GMAIL_USER.
     if (!r.ok) return { ...r, sender: process.env.GMAIL_USER || process.env.EMAIL_FROM };

@@ -1,5 +1,5 @@
 import type { DailyAi, WeeklyAi } from "@/lib/reports/ai";
-import type { DailyData, WeeklyData } from "@/lib/reports/build";
+import { aiMissingReason, type DailyData, type WeeklyData } from "@/lib/reports/build";
 import { getDict } from "@/lib/i18n";
 import { isoWeekday } from "@/lib/profile";
 
@@ -94,7 +94,7 @@ export function DailyReportView({ lang, data, ai }: { lang: Lang; data: DailyDat
           )}
         </>
       ) : (
-        <p className="text-sm text-ink-soft">{t.aiMissing}</p>
+        <p className="text-sm text-ink-soft">{t.aiMissing(aiMissingReason(data))}</p>
       )}
     </div>
   );
@@ -169,7 +169,7 @@ export function WeeklyReportView({ lang, data, ai }: { lang: Lang; data: WeeklyD
           )}
         </>
       ) : (
-        <p className="text-sm text-ink-soft">{t.aiMissing}</p>
+        <p className="text-sm text-ink-soft">{t.aiMissing(aiMissingReason(data))}</p>
       )}
     </div>
   );

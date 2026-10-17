@@ -338,7 +338,19 @@ export const en = {
     calories: "Calories",
     goalHit: "hit",
     goalMissed: "missed",
-    aiMissing: "No AI comment this time (AI paused or unavailable).",
+    /** Why a report has no AI comment; reason is an AiFailure, "pending" or missing (older reports). */
+    aiMissing: (reason?: string): string =>
+      reason === "pending"
+        ? "The AI comment is still on its way. Check back in a few minutes."
+        : reason === "budget"
+          ? "No AI comment: this month's AI spending limit has been reached."
+          : reason === "refused"
+            ? "The AI declined to comment on this day."
+            : reason === "no_key"
+              ? "No AI comment: AI isn't set up."
+              : reason === "error"
+                ? "No AI comment: the AI service didn't respond, despite several tries over 15 minutes."
+                : "No AI comment this time.",
     openApp: "Open the app",
     footer: "Change emails in Settings → Diet → Report emails.",
     days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],

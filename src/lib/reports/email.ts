@@ -102,7 +102,7 @@ ${d.target ? `<div style="margin-top:12px;">${bar((d.eaten / d.target) * 100, d.
     ? `${ai.good.length ? `${h2(t.good)}<table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">${list(ai.good, "+", C.good)}</table>` : ""}
 ${ai.bad.length ? `${h2(t.bad)}<table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">${list(ai.bad, "−", C.bad)}</table>` : ""}
 ${ai.tip ? `${h2(t.tip)}<div style="font-size:15px;line-height:1.5;background:${C.page};border-left:3px solid ${C.accent};padding:10px 12px;border-radius:6px;">${esc(ai.tip)}</div>` : ""}`
-    : `<div style="font-size:14px;color:${C.soft};">${esc(t.aiMissing)}</div>`;
+    : `<div style="font-size:14px;color:${C.soft};">${esc(t.aiMissing(d.aiFailure))}</div>`;
 
   const body =
     card(top) +
@@ -186,7 +186,7 @@ export function renderWeekly(lang: Lang, w: WeeklyData, ai: WeeklyAi | null, app
               .join("")}`,
           )
         : "")
-    : card(`<div style="font-size:14px;color:${C.soft};">${esc(t.aiMissing)}</div>`);
+    : card(`<div style="font-size:14px;color:${C.soft};">${esc(t.aiMissing(w.aiFailure))}</div>`);
 
   const body = card(progressBlock(lang, w)) + card(`${h2(t.calories)}${weekTable(lang, w)}`) + review;
   const subject = t.weeklySubject(rangeLabel(lang, w.start, w.end));

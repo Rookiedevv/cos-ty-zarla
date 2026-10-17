@@ -12,6 +12,7 @@ Live at https://cos-ty-zarla.vercel.app. Invite-only (Google login + allow-list)
 - When he asks "what do you think is best?", **answer with your recommendation in plain text first**, then offer the buttons.
 - **For any manual step** (Supabase, Vercel, Google), go **one step at a time** and give **direct links and ready-to-paste content** (full SQL, exact values). Never make him look up a file on GitHub.
 - He prefers the fewest steps on his side.
+- **He is often on his phone.** Never ask him to run diagnostics (SQL, logs, dashboards) to find a bug. Work it out from the code, fix the likely causes, and build in-app visibility (e.g. a clear reason in the UI or email) instead. Ask for a manual step only when a change truly can't ship without it (e.g. a migration), and say if it needs a computer.
 - **Secrets never go in chat or the repo.** They only go in Vercel env vars: ANTHROPIC_API_KEY, SUPABASE_SECRET_KEY, GMAIL_APP_PASSWORD, CRON_SECRET. The repo is **public**.
 - Be honest about uncertainty: say what you verified and what you couldn't.
 - Commit messages: imperative summary + short body.
@@ -66,6 +67,7 @@ RLS tests in `supabase/tests/*.sql` run on a plain local Postgres with `stub_sup
   - Weekly email on each person's own weigh-in day, right after the weight is logged (or at 21:00 without it): progress, diet fit, sleep if short, suggestions.
   - Followers (the followed person must approve) get a simplified weekly email.
   - All reports are stored in the `reports` table and shown in History → Raporty.
+  - AI comment (`src/lib/reports/ai.ts`): up to 3 tries per run (cut-off answers retried with 2× tokens; daily 1500, weekly 2500). On a passing failure the email **waits** and the next cron runs retry (`AI_RUNS` = 3, state in `reports.data.aiFailure/aiTries`); then it's sent with a reason-specific line (limit / AI refused / service down). History shows "still on its way" meanwhile.
 - Loading states: Button `loading` prop, `LongWait` progress card + 45 s timeout/retry for AI, `loading.tsx` skeletons, `TabLink`/`NavPending`, optimistic deletes/water/switches.
 
 ## Open issues / ideas (ask before doing any)

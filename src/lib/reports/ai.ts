@@ -4,7 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { checkCostAlerts } from "../ai/alerts";
 import { STOP_USD, costOf, spentThisMonth } from "../ai/budget";
 import { getDict } from "../i18n";
-import type { DailyData, WeeklyData } from "./build";
+import type { AiFailure, DailyData, WeeklyData } from "./build";
+
+export type { AiFailure };
 
 export interface DailyAi {
   good: string[];
@@ -60,9 +62,20 @@ function dietLabel(lang: "en" | "pl", method: DailyData["method"], focus: DailyD
   return `method: ${t.methods[method][0]} (${t.methods[method][1]}); food focus: ${t.focuses[focus][0]} (${t.focuses[focus][1]})`;
 }
 
+export type AiResult<T> = { ok: true; value: T } | { ok: false; reason: AiFailure };
+
+/** Tries per call inside one run. Outages that last longer are retried on the next cron runs (see run.ts). */
+const ATTEMPTS = 3;
+let pauseMs = (attempt: number): number => (attempt === 2 ? 1500 : 4000);
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Tests only: no waiting between tries. */
+export function _noPauseForTests() {
+  pauseMs = () => 0;
+}
+
 /**
- * Runs one AI call with a JSON schema, records its cost, and respects the monthly
- * hard stop. Returns null instead of throwing: a report without the comment still goes out.
+ * Runs one AI call with a JSON schema, records its cost, and respects the monthly hard stop.
+ * Retries failed or cut-off answers (cut-off ones with twice the room). Never throws.
  */
 async function callJson<T>(
   admin: SupabaseClient,
@@ -72,35 +85,58 @@ async function callJson<T>(
   user: string,
   schema: Record<string, unknown>,
   maxTokens: number,
-): Promise<T | null> {
+): Promise<AiResult<T>> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-  try {
-    if ((await spentThisMonth(admin)) >= STOP_USD) return null;
-    const model = process.env.AI_MODEL || "claude-haiku-5-5";
-    const response = await new Anthropic({ apiKey }).messages.create({
-      model,
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: "user", content: user }],
-      output_config: { format: { type: "json_schema", schema } },
-    });
-    await admin.from("ai_usage").insert({
-      user_id: userId,
-      model,
-      purpose,
-      tokens_in: response.usage.input_tokens,
-      tokens_out: response.usage.output_tokens,
-      cost_usd: costOf(model, response.usage.input_tokens, response.usage.output_tokens),
-    });
-    await checkCostAlerts(admin, await spentThisMonth(admin));
-    if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") return null;
-    const text = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
-    return text ? (JSON.parse(text) as T) : null;
-  } catch (e) {
-    console.error(`${purpose} AI failed`, e);
-    return null;
+  if (!apiKey) return { ok: false, reason: "no_key" };
+  const model = process.env.AI_MODEL || "claude-haiku-5-5";
+  // The cron run has 60 s for everyone; this loop retries itself, so no hidden SDK retries.
+  const client = new Anthropic({ apiKey, timeout: 20_000, maxRetries: 0 });
+  const started = Date.now();
+  let room = maxTokens;
+  let refusals = 0;
+
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    if (attempt > 1) {
+      if (Date.now() - started > 30_000) break; // leave the rest to the next cron run
+      await pause(pauseMs(attempt));
+    }
+    try {
+      if ((await spentThisMonth(admin)) >= STOP_USD) return { ok: false, reason: "budget" };
+      const response = await client.messages.create({
+        model,
+        max_tokens: room,
+        system,
+        messages: [{ role: "user", content: user }],
+        output_config: { format: { type: "json_schema", schema } },
+      });
+      await admin.from("ai_usage").insert({
+        user_id: userId,
+        model,
+        purpose,
+        tokens_in: response.usage.input_tokens,
+        tokens_out: response.usage.output_tokens,
+        cost_usd: costOf(model, response.usage.input_tokens, response.usage.output_tokens),
+      });
+      await checkCostAlerts(admin, await spentThisMonth(admin));
+      if (response.stop_reason === "refusal") {
+        refusals++;
+        console.error(`${purpose} AI refused (attempt ${attempt})`);
+        continue;
+      }
+      if (response.stop_reason === "max_tokens") {
+        console.error(`${purpose} AI answer cut off at ${room} tokens (attempt ${attempt})`);
+        room *= 2;
+        continue;
+      }
+      const text = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
+      if (!text) continue;
+      return { ok: true, value: JSON.parse(text) as T };
+    } catch (e) {
+      console.error(`${purpose} AI failed (attempt ${attempt})`, e);
+    }
   }
+  // Refused every time → say so; anything else (including a mix) counts as a service problem.
+  return { ok: false, reason: refusals === ATTEMPTS ? "refused" : "error" };
 }
 
 const VOICE = (lang: "en" | "pl") =>
@@ -114,7 +150,7 @@ const VOICE = (lang: "en" | "pl") =>
       : "Write in English, addressing the person as 'you'.",
   ].join("\n");
 
-export async function dailyComment(admin: SupabaseClient, userId: string, lang: "en" | "pl", d: DailyData): Promise<DailyAi | null> {
+export async function dailyComment(admin: SupabaseClient, userId: string, lang: "en" | "pl", d: DailyData): Promise<AiResult<DailyAi>> {
   const meals = d.meals
     .map((m) => `${m.time} ${m.description} — ${m.kcal} kcal${m.items.length ? ` [${m.items.map((i) => `${i.name}${i.amount != null ? ` ${i.amount}${i.unit ?? ""}` : ""} ${i.kcal} kcal`).join("; ")}]` : ""}`)
     .join("\n");
@@ -125,10 +161,12 @@ export async function dailyComment(admin: SupabaseClient, userId: string, lang: 
     `Meals:\n${meals || "(none logged)"}`,
     "Review the structure of these meals.",
   ].join("\n");
-  const r = await callJson<DailyAi>(admin, userId, "report_daily", VOICE(lang), user, DAILY_SCHEMA as unknown as Record<string, unknown>, 500);
-  if (!r) return null;
+  // Polish needs many tokens; 500 was cutting answers off. You only pay for what's written.
+  const res = await callJson<DailyAi>(admin, userId, "report_daily", VOICE(lang), user, DAILY_SCHEMA as unknown as Record<string, unknown>, 1500);
+  if (!res.ok) return res;
+  const r = res.value;
   const clean = (a: unknown) => (Array.isArray(a) ? a.map((s) => String(s).slice(0, 300)).filter(Boolean).slice(0, 3) : []);
-  return { good: clean(r.good), bad: clean(r.bad), tip: String(r.tip ?? "").slice(0, 300) };
+  return { ok: true, value: { good: clean(r.good), bad: clean(r.bad), tip: String(r.tip ?? "").slice(0, 300) } };
 }
 
 export async function weeklyComment(
@@ -138,7 +176,7 @@ export async function weeklyComment(
   name: string,
   sex: "male" | "female" | null,
   w: WeeklyData,
-): Promise<WeeklyAi | null> {
+): Promise<AiResult<WeeklyAi>> {
   const days = w.days
     .map((d) => `${d.date}: ${d.logged ? `${d.eaten} kcal${d.target != null ? ` / target ${d.target}` : ""}` : "nothing logged"}, water ${d.waterMl} ml${d.sleepHours != null ? `, sleep ${d.sleepHours} h` : ""}`)
     .join("\n");
@@ -154,14 +192,15 @@ export async function weeklyComment(
     `Days:\n${days}`,
     `Meals:\n${meals || "(none logged)"}`,
   ].join("\n");
-  const r = await callJson<WeeklyAi>(admin, userId, "report_weekly", VOICE(lang), user, WEEKLY_SCHEMA as unknown as Record<string, unknown>, 900);
-  if (!r) return null;
+  const res = await callJson<WeeklyAi>(admin, userId, "report_weekly", VOICE(lang), user, WEEKLY_SCHEMA as unknown as Record<string, unknown>, 2500);
+  if (!res.ok) return res;
+  const r = res.value;
   const s = (v: unknown, n = 600) => String(v ?? "").slice(0, n);
-  return {
+  return { ok: true, value: {
     summary: s(r.summary),
     diet_fit: s(r.diet_fit),
     sleep: s(r.sleep),
     suggestions: (Array.isArray(r.suggestions) ? r.suggestions : []).slice(0, 3).map((x) => ({ what: s(x?.what, 200), how: s(x?.how, 400) })),
     friend_summary: s(r.friend_summary, 400),
-  };
+  } };
 }

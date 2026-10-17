@@ -62,3 +62,12 @@ describe("report emails", () => {
     expect(m.html).toContain("−0,6 kg");
   });
 });
+
+describe("missing AI comment", () => {
+  it("names the reason in the email", async () => {
+    const { renderDaily } = await import("./email");
+    expect(renderDaily("pl", { ...daily, aiFailure: "budget" }, null, "https://x.app").html).toContain("limit wydatków");
+    expect(renderDaily("pl", { ...daily, aiFailure: "refused" }, null, "https://x.app").html).toContain("AI odmówiło");
+    expect(renderDaily("pl", { ...daily, aiFailure: "error" }, null, "https://x.app").html).toContain("mimo kilku prób");
+  });
+});

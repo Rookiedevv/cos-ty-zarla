@@ -340,7 +340,19 @@ export const pl: Dict = {
     calories: "Kalorie",
     goalHit: "cel osiągnięty",
     goalMissed: "cel nieosiągnięty",
-    aiMissing: "Tym razem bez komentarza AI (limit albo chwilowy błąd).",
+    /** Why a report has no AI comment; reason is an AiFailure, "pending" or missing (older reports). */
+    aiMissing: (reason?: string) =>
+      reason === "pending"
+        ? "Komentarz AI jeszcze się przygotowuje. Zajrzyj za kilka minut."
+        : reason === "budget"
+          ? "Brak komentarza AI: w tym miesiącu wyczerpał się limit wydatków na AI."
+          : reason === "refused"
+            ? "AI odmówiło skomentowania tego dnia."
+            : reason === "no_key"
+              ? "Brak komentarza AI: AI nie jest skonfigurowane."
+              : reason === "error"
+                ? "Brak komentarza AI: usługa AI nie odpowiadała, mimo kilku prób przez kwadrans."
+                : "Tym razem bez komentarza AI.",
     openApp: "Otwórz aplikację",
     footer: "E-maile zmienisz w Ustawienia → Dieta → Raporty e-mail.",
     days: ["pon", "wt", "śr", "czw", "pt", "sob", "nd"],
