@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Notice, Panel, PanelTitle, dec, fmt } from "@/components/ui";
 import { MealList } from "@/components/meal-list";
+import { ShareDayButton } from "@/components/share-day-button";
+import { localTime } from "@/lib/engine/dates";
 import { WaterPanel } from "@/components/water-panel";
 import { WorkoutList } from "@/components/workout-list";
 import { DietReminderCard } from "@/components/diet-reminder-card";
@@ -144,7 +146,30 @@ export function TodayView({ day, lang, timezone, diet }: { day: DayState; lang: 
       )}
 
       <Panel>
-        <PanelTitle>{t.today.meals}</PanelTitle>
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <h2 className="board text-xl">{t.today.meals}</h2>
+          {day.meals.length > 0 && (
+            <ShareDayButton
+              fileDate={date}
+              day={{
+                appName: t.appName,
+                heading: heading.charAt(0).toUpperCase() + heading.slice(1),
+                meals: day.meals.map((m) => ({
+                  time: localTime(new Date(m.eaten_at), timezone),
+                  description: m.description,
+                  kcal: m.total_kcal,
+                  items: [...(m.meal_items ?? [])]
+                    .sort((a, b) => a.position - b.position)
+                    .map((i) => ({ name: i.name, amount: i.amount != null ? Number(i.amount) : null, unit: i.unit, kcal: i.kcal })),
+                })),
+                eaten: day.eaten,
+                target: target?.target ?? null,
+                labels: { eaten: t.today.eaten, target: t.today.target, left: t.today.left, over: t.today.over, kcal: t.common.kcal, pcs: t.ai.pcs },
+                locale,
+              }}
+            />
+          )}
+        </div>
         <MealList meals={day.meals} timezone={timezone} />
         <Link
           href="/log"
