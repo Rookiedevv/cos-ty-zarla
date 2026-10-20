@@ -8,9 +8,14 @@ import { displayName } from "./reports/run";
  * Returns an empty list if the recipes table isn't there yet (migration not run) instead of failing the screen.
  */
 export async function loadRecipes(supabase: SupabaseClient, userId: string): Promise<SavedRecipe[]> {
-  const [recipesRes, hidesRes] = await Promise.all([
+  // One round: recipes, this person's hides, and everyone's names (a handful of people; profiles are private, so via the server key).
+  const namesQuery = process.env.SUPABASE_SECRET_KEY
+    ? import("./supabase/admin").then(({ createAdminClient }) => createAdminClient().from("profiles").select("id, display_name, email"))
+    : Promise.resolve({ data: [] as { id: string; display_name: string | null; email: string }[] });
+  const [recipesRes, hidesRes, namesRes] = await Promise.all([
     supabase.from("recipes").select(RECIPE_COLUMNS).order("created_at", { ascending: false }),
     supabase.from("recipe_hides").select("recipe_id").eq("user_id", userId),
+    namesQuery,
   ]);
   if (recipesRes.error) {
     console.error("recipes load failed", recipesRes.error.message);
@@ -19,14 +24,8 @@ export async function loadRecipes(supabase: SupabaseClient, userId: string): Pro
   const rows = recipesRes.data ?? [];
   const hidden = new Set((hidesRes.data ?? []).map((h) => h.recipe_id as string));
 
-  // Other people's names come from profiles, which each person can only read for themselves.
-  const ownerIds = [...new Set(rows.map((r) => r.user_id as string))];
   const names = new Map<string, string>();
-  if (ownerIds.length && process.env.SUPABASE_SECRET_KEY) {
-    const { createAdminClient } = await import("./supabase/admin");
-    const { data } = await createAdminClient().from("profiles").select("id, display_name, email").in("id", ownerIds);
-    for (const p of data ?? []) names.set(p.id as string, displayName(p as { display_name: string | null; email: string }));
-  }
+  for (const p of namesRes.data ?? []) names.set(p.id as string, displayName(p as { display_name: string | null; email: string }));
 
   return rows.map((r) => ({
     id: r.id as string,

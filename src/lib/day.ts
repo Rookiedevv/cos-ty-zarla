@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { after } from "next/server";
 import { addDays, ageOn, localDate, localTime } from "./engine/dates";
 import { computeTarget, waterTargetMl, watchActiveKcal, watchIsFresh } from "./engine/target";
 import { ENGINE } from "./engine/constants";
@@ -85,7 +86,14 @@ export function todayFor(profile: Profile, now = new Date()) {
  * Loads everything the Today screen needs and stores the day's target snapshot.
  * Every query filters by user explicitly, so this is also safe with the server-side admin client.
  */
-export async function loadDay(supabase: SupabaseClient, profile: Profile, date: string, now = new Date()): Promise<DayState> {
+export async function loadDay(
+  supabase: SupabaseClient,
+  profile: Profile,
+  date: string,
+  now = new Date(),
+  /** "after": save the target snapshot once the page has been sent (the Today screen); default waits for it (cron, reports). */
+  saveTarget: "wait" | "after" = "wait",
+): Promise<DayState> {
   const historyStart = addDays(date, -(ENGINE.CARRY_MAX_DAYS * 2));
 
   const [weightRes, checkinRes, mealsRes, waterRes, targetsRes, intakeRes, healthRes, workoutsRes, devicesRes] = await Promise.all([
@@ -163,13 +171,13 @@ export async function loadDay(supabase: SupabaseClient, profile: Profile, date: 
       history,
     });
 
-    await supabase.from("daily_targets").upsert({
-      user_id: profile.id,
-      date,
-      pre_carry_target: target.preCarryTarget,
-      final_target: target.target,
-      breakdown: target,
-    });
+    const snapshot = { user_id: profile.id, date, pre_carry_target: target.preCarryTarget, final_target: target.target, breakdown: target };
+    const save = async () => {
+      const { error } = await supabase.from("daily_targets").upsert(snapshot);
+      if (error) console.error("daily target save failed", error.message);
+    };
+    if (saveTarget === "after") after(save);
+    else await save();
   }
 
   const exerciseHours = watch?.fresh

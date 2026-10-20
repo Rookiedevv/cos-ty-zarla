@@ -28,8 +28,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const tab: Tab = (await searchParams).tab === "account" ? "account" : "diet";
   const t = getDict(profile.language);
 
-  const { data: w } = await supabase.from("weights").select("kg, date").eq("user_id", profile.id).order("date", { ascending: false }).limit(1).maybeSingle();
-  const last = w ? { kg: Number(w.kg), date: w.date as string } : null;
 
   return (
     <main className="space-y-4 pt-2">
@@ -44,7 +42,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         ))}
       </nav>
 
-      {tab === "diet" ? <DietTab supabase={supabase} profile={profile} last={last} /> : <AccountTab supabase={supabase} profile={profile} />}
+      {tab === "diet" ? <DietTab supabase={supabase} profile={profile} /> : <AccountTab supabase={supabase} profile={profile} />}
     </main>
   );
 }
@@ -67,13 +65,15 @@ function GuideRow({ href, name, summary, current, currentLabel }: { href: string
 }
 
 /** Everything about you and your diet: weight, profile, routine, pace, method, water, reports, cheatsheets. */
-async function DietTab({ supabase, profile, last }: Ctx & { last: { kg: number; date: string } | null }) {
+async function DietTab({ supabase, profile }: Ctx) {
   const t = getDict(profile.language);
-  // Other people's names come through the server key: profiles are otherwise private to their owner.
-  const [{ data: others }, { data: follows }] = await Promise.all([
+  // One round of queries. Other people's names come through the server key: profiles are otherwise private to their owner.
+  const [{ data: w }, { data: others }, { data: follows }] = await Promise.all([
+    supabase.from("weights").select("kg, date").eq("user_id", profile.id).order("date", { ascending: false }).limit(1).maybeSingle(),
     createAdminClient().from("profiles").select("id, display_name, email").neq("id", profile.id).not("onboarded_at", "is", null).order("created_at"),
     supabase.from("follows").select("follower_id, followee_id, status"),
   ]);
+  const last = w ? { kg: Number(w.kg), date: w.date as string } : null;
   const people: Person[] = (others ?? []).map((p) => ({ id: p.id as string, name: displayName(p as { display_name: string | null; email: string }) }));
   const nameOf = new Map(people.map((p) => [p.id, p.name]));
   const outgoing = Object.fromEntries((follows ?? []).filter((f) => f.follower_id === profile.id).map((f) => [f.followee_id as string, f.status as "pending" | "approved"]));
@@ -128,24 +128,17 @@ async function DietTab({ supabase, profile, last }: Ctx & { last: { kg: number; 
 /** The app itself: reminders, watch, AI costs, access, sign out. */
 async function AccountTab({ supabase, profile }: Ctx) {
   const t = getDict(profile.language);
-  const { data: deviceRows } = await supabase
-    .from("device_tokens")
-    .select("id, label, created_at, last_sync_at")
-    .eq("user_id", profile.id)
-    .order("created_at");
+  // One round of queries; the admin-only ones are skipped for everyone else.
+  const monthStart = `${new Date().toISOString().slice(0, 7)}-01T00:00:00Z`;
+  const none = Promise.resolve({ data: null });
+  const [{ data: deviceRows }, { data: usage }, { data: allowed }] = await Promise.all([
+    supabase.from("device_tokens").select("id, label, created_at, last_sync_at").eq("user_id", profile.id).order("created_at"),
+    profile.is_admin ? supabase.from("ai_usage").select("user_id, cost_usd").gte("at", monthStart) : none,
+    profile.is_admin ? supabase.from("allowed_emails").select("email").order("added_at") : none,
+  ]);
   const devices = (deviceRows ?? []) as Device[];
-
-  let emails: string[] = [];
-  let costRows: CostRow[] = [];
-  if (profile.is_admin) {
-    const monthStart = `${new Date().toISOString().slice(0, 7)}-01T00:00:00Z`;
-    const [{ data: usage }, { data }] = await Promise.all([
-      supabase.from("ai_usage").select("user_id, cost_usd").gte("at", monthStart),
-      supabase.from("allowed_emails").select("email").order("added_at"),
-    ]);
-    costRows = (usage ?? []) as CostRow[];
-    emails = (data ?? []).map((r) => r.email as string);
-  }
+  const costRows = (usage ?? []) as CostRow[];
+  const emails = ((allowed ?? []) as { email: string }[]).map((r) => r.email);
 
   return (
     <>
