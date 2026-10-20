@@ -1,5 +1,6 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import { parseAnswer } from "./guard";
 
 export interface WorkoutEstimate {
   label: string;
@@ -42,17 +43,12 @@ export async function estimateWorkout(args: { text: string; minutes: number | nu
     ],
     output_config: { format: { type: "json_schema", schema: SCHEMA as unknown as Record<string, unknown> } },
   });
-  if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") throw new Error("INCOMPLETE");
-  const text = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
-  if (!text) throw new Error("NO_OUTPUT");
-  const raw = JSON.parse(text) as WorkoutEstimate;
+  const { value: raw, usage } = parseAnswer<WorkoutEstimate>(response, model);
   const minutes = Math.min(600, Math.max(1, Math.round(args.minutes ?? raw.minutes ?? 45)));
   // Cap at ~15 kcal/kg/hour, beyond any realistic sustained effort.
   const kcal = Math.min(Math.round(15 * args.weightKg * (minutes / 60)), Math.max(0, Math.round(raw.kcal)));
   return {
     estimate: { label: String(raw.label || "").slice(0, 60) || args.text.slice(0, 60), minutes, kcal },
-    model,
-    tokensIn: response.usage.input_tokens,
-    tokensOut: response.usage.output_tokens,
+    ...usage,
   };
 }

@@ -52,7 +52,7 @@ function fakeAdmin(spent = 0) {
     const q: Record<string, unknown> = {
       then: (ok: (v: unknown) => unknown) => Promise.resolve(result).then(ok),
     };
-    for (const m of ["select", "eq", "gte", "in", "insert", "maybeSingle", "single"]) q[m] = () => q;
+    for (const m of ["select", "eq", "gte", "in", "insert", "maybeSingle", "single", "order", "range"]) q[m] = () => q;
     q.update = (v: Record<string, unknown>) => {
       updates.push(v);
       return q;
@@ -135,4 +135,21 @@ describe("report waits for the AI", () => {
     expect(updates[0]).toMatchObject({ data: { aiFailure: "error", aiTries: 2 } });
     expect(updates[1]).toMatchObject({ ai: { tip: "x" } });
   });
+
+  it("sends without the comment when the last try was cut off mid-call", async () => {
+    const { tryComment, waitingForAi } = await import("./run");
+    const { AI_RUNS } = await import("./build");
+    // The last run counted its try, then the cron's time ran out before the AI answered.
+    const stuck: DailyData = { ...day, aiFailure: "error", aiTries: AI_RUNS };
+    expect(waitingForAi({ id: "r1", ai: null, emailed_at: null, data: stuck })).toBe(true);
+    let called = false;
+    const done = await tryComment(fakeAdmin().admin, "r1", stuck, async () => {
+      called = true;
+      return { ok: true as const, value: {} };
+    });
+    expect(called).toBe(false);
+    expect(done).toMatchObject({ ai: null, data: { aiFinal: true } });
+    expect(waitingForAi({ id: "r1", ai: null, emailed_at: null, data: done!.data })).toBe(false);
+  });
 });
+

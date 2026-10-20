@@ -189,7 +189,7 @@ function WorkoutEditor({ weightKg, onAdd, onCancel }: { weightKg: number; onAdd:
       const r = await withTimeout(estimateWorkoutAction({ text, minutes: mins }));
       if (r === "timeout") return setTimedOut(true);
       if (r.ok) setEstimate({ label: r.label, minutes: r.minutes, kcal: r.kcal });
-      else setNotice(r.error === "ai_paused" ? ai.paused : r.error === "not_configured" ? ai.notConfigured : ai.failed);
+      else setNotice(r.error === "ai_paused" ? ai.paused : r.error === "busy" ? ai.busy : r.error === "not_configured" ? ai.notConfigured : ai.failed);
     });
   };
 

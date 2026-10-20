@@ -41,20 +41,20 @@ function MicIcon() {
   );
 }
 
-export function RecipeFlow({ showProtein, initial }: { showProtein: boolean; initial?: RecipeEstimate }) {
+export function RecipeFlow({ showProtein }: { showProtein: boolean }) {
   const t = useT();
   const r = t.recipe;
   const lang = useLang();
   const [text, setText] = useState("");
   const [portions, setPortions] = useState(4);
-  const [result, setResult] = useState<RecipeEstimate | null>(initial ?? null);
+  const [result, setResult] = useState<RecipeEstimate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [estimating, startEstimate] = useTransition();
   const attempt = useRef(0);
   const [attemptKey, setAttemptKey] = useState(0);
   const [retry, setRetry] = useState<(() => void) | null>(null);
   const mic = useDictation({ lang, value: text, onChange: setText });
-  const [saveName, setSaveName] = useState(initial?.name ?? "");
+  const [saveName, setSaveName] = useState("");
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [saving, startSave] = useTransition();
@@ -79,7 +79,7 @@ export function RecipeFlow({ showProtein, initial }: { showProtein: boolean; ini
   };
 
   const errorText = (e: Extract<RecipeResponse, { ok: false }>["error"]) =>
-    e === "ai_paused" ? r.paused : e === "not_configured" ? r.notConfigured : e === "invalid" ? r.needInput : r.failed;
+    e === "ai_paused" ? r.paused : e === "busy" ? r.busy : e === "not_configured" ? r.notConfigured : e === "invalid" ? r.needInput : r.failed;
 
   const calculate = () => {
     if (mic.listening) mic.stop();
@@ -124,6 +124,8 @@ export function RecipeFlow({ showProtein, initial }: { showProtein: boolean; ini
               onChange={(e) => setText(e.target.value)}
               placeholder={r.placeholder}
               maxLength={3000}
+              readOnly={mic.listening} // dictation writes here; typing at the same time would be overwritten
+              aria-busy={mic.listening || undefined}
             />
           </Field>
 
@@ -171,7 +173,11 @@ export function RecipeFlow({ showProtein, initial }: { showProtein: boolean; ini
             {showProtein && <p className="mt-1 text-sm text-ink-soft">{r.proteinPerPortion(dec(lang, protein / portions, 0))}</p>}
           </div>
 
-          <PortionPicker value={portions} onChange={setPortions} label={r.portions} />
+          {saved ? (
+            <p className="text-center text-sm text-ink-soft">{r.portionsCount(portions)}</p>
+          ) : (
+            <PortionPicker value={portions} onChange={setPortions} label={r.portions} />
+          )}
 
           <div className="menu-row">
             <span className="font-semibold">{r.wholeDish}</span>

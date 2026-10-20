@@ -48,3 +48,25 @@ describe("sanitize", () => {
     expect(s.questions).toEqual([]);
   });
 });
+
+describe("follow-up questions", () => {
+  it("never repeats a question id or an option", () => {
+    const s = sanitize(
+      {
+        description: "x",
+        items: [],
+        questions: [
+          { id: "q1", text: "Ile?", options: ["1", "1", "2"] },
+          { id: "q1", text: "Olej?", options: ["tak", "nie"] },
+          { id: "", text: "Sos?", options: ["tak"] },
+        ],
+        fits_diet: "yes",
+        verdict: "",
+      },
+      false,
+    );
+    expect(s.questions.map((q) => q.id)).toEqual(["q1", "q2", "q3"]);
+    expect(s.questions[0].options).toEqual(["1", "2"]);
+  });
+});
+

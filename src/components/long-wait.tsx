@@ -7,9 +7,24 @@ import { Button, Spinner } from "./ui";
 /** Waits longer than this many ms are treated as failed (the server call may still finish; its late result is ignored). */
 export const WAIT_TIMEOUT_MS = 45_000;
 
-/** Resolves to "timeout" if `p` hasn't settled within `ms`. */
+/** Next.js redirects and not-found travel as thrown errors with a NEXT_ digest; those must pass through. */
+const isNextSignal = (e: unknown) => typeof (e as { digest?: unknown })?.digest === "string" && (e as { digest: string }).digest.startsWith("NEXT_");
+
+/**
+ * Resolves to "timeout" if `p` hasn't settled within `ms`, or if it fails (dropped connection, an
+ * app update in between). Callers already show a retry for "timeout", so a failure never crashes the screen.
+ */
 export function withTimeout<T>(p: Promise<T>, ms = WAIT_TIMEOUT_MS): Promise<T | "timeout"> {
-  return Promise.race([p, new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), ms))]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), ms);
+  });
+  const safe = p.catch((e: unknown) => {
+    if (isNextSignal(e)) throw e;
+    console.error("server call failed", e);
+    return "timeout" as const;
+  });
+  return Promise.race([safe, late]).finally(() => clearTimeout(timer));
 }
 
 /**

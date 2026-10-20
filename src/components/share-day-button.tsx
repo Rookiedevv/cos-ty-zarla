@@ -25,13 +25,7 @@ export function ShareDayButton({ day, fileDate }: { day: ShareDay; fileDate: str
       if (!blob) throw new Error("no image");
       const file = new File([blob], `zarla-${fileDate}.png`, { type: "image/png" });
 
-      if (navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: day.heading });
-        } catch (e) {
-          if ((e as Error).name !== "AbortError") throw e; // closing the share menu is fine
-        }
-      } else {
+      const download = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -39,7 +33,15 @@ export function ShareDayButton({ day, fileDate }: { day: ShareDay; fileDate: str
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 10_000);
         setNote(t.shareDownloaded);
-      }
+      };
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: day.heading });
+        } catch (e) {
+          // Closing the share menu is fine. Anything else (e.g. a slow phone let the tap "expire") → download instead.
+          if ((e as Error).name !== "AbortError") download();
+        }
+      } else download();
     } catch (e) {
       console.error("share failed", e);
       setNote(t.shareFailed);

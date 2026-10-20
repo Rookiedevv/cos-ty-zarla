@@ -47,6 +47,7 @@ export function EmailReportSettings({ prefs, configured }: { prefs: Partial<Reco
       if (r === "timeout") setResult({ tone: "warn", text: all.wait.timeout });
       else if (r.ok) setResult({ tone: "info", text: t.testSent(r.to) });
       else if (r.error === "not_configured") setResult({ tone: "warn", text: t.testNotSetup });
+      else if (r.error === "busy") setResult({ tone: "warn", text: t.testBusy });
       else if (/auth|535|534|credentials|password/i.test(r.error)) setResult({ tone: "warn", text: t.testAuth(r.sender ?? "?", r.error) });
       else setResult({ tone: "warn", text: t.testFailed(r.error) });
     });

@@ -21,9 +21,23 @@ export function monthStart(now = new Date()): string {
   return `${now.toISOString().slice(0, 7)}-01`;
 }
 
+/** The API hands out at most 1000 rows per request, so cost rows are read page by page. */
+const PAGE = 1000;
+
+/** Every cost row since `fromIso` (all of them, not just the first 1000). Throws if a page can't be read. */
+export async function usageRowsSince(client: SupabaseClient, fromIso: string): Promise<{ user_id: string; cost_usd: number }[]> {
+  const rows: { user_id: string; cost_usd: number }[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await client.from("ai_usage").select("id, user_id, cost_usd").gte("at", fromIso).order("id").range(from, from + PAGE - 1);
+    if (error) throw new Error(`ai_usage read failed: ${error.message}`);
+    for (const r of data ?? []) rows.push({ user_id: r.user_id as string, cost_usd: Number(r.cost_usd) });
+    if (!data || data.length < PAGE) return rows;
+  }
+}
+
 export async function spentThisMonth(admin: SupabaseClient, now = new Date()): Promise<number> {
-  const { data } = await admin.from("ai_usage").select("cost_usd").gte("at", `${monthStart(now)}T00:00:00Z`);
-  return (data ?? []).reduce((s, r) => s + Number(r.cost_usd), 0);
+  const rows = await usageRowsSince(admin, `${monthStart(now)}T00:00:00Z`);
+  return rows.reduce((s, r) => s + r.cost_usd, 0);
 }
 
 /** Which alert levels a spend crosses that haven't been sent yet. Pure, for testing. */

@@ -1,5 +1,6 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import { parseAnswer } from "./guard";
 
 export interface RecipeItem {
   name: string;
@@ -88,11 +89,8 @@ export async function estimateRecipe(input: RecipeInput): Promise<RecipeCall> {
     output_config: { format: { type: "json_schema", schema: SCHEMA as unknown as Record<string, unknown> } },
   });
 
-  if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") throw new Error(`INCOMPLETE_${response.stop_reason}`);
-  const text = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
-  if (!text) throw new Error("NO_OUTPUT");
-  const estimate = sanitizeRecipe(JSON.parse(text) as RecipeEstimate);
-  return { estimate, model, tokensIn: response.usage.input_tokens, tokensOut: response.usage.output_tokens };
+  const { value, usage } = parseAnswer<RecipeEstimate>(response, model);
+  return { estimate: sanitizeRecipe(value), ...usage };
 }
 
 /** Clamp anything out of range; the API guarantees shape, not sensible numbers. A whole pot can be big, so limits are wider than for a meal. */

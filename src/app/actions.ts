@@ -206,7 +206,7 @@ export async function deleteWorkout(id: string): Promise<ActionResult> {
 
 /** Free-text workout ("1 h of padel, very sweaty") → kcal estimate the person confirms before saving. */
 export async function estimateWorkoutAction(input: { text: string; minutes: number | null }): Promise<
-  { ok: true; label: string; minutes: number; kcal: number } | { ok: false; error: "ai_paused" | "not_configured" | "invalid" | "failed" }
+  { ok: true; label: string; minutes: number; kcal: number } | { ok: false; error: "ai_paused" | "busy" | "not_configured" | "invalid" | "failed" }
 > {
   const { supabase, profile } = await requireUser();
   const parsed = z.object({ text: z.string().trim().min(2).max(300), minutes: z.number().int().min(1).max(600).nullable() }).safeParse(input);
@@ -214,24 +214,13 @@ export async function estimateWorkoutAction(input: { text: string; minutes: numb
   if (!process.env.ANTHROPIC_API_KEY || !process.env.SUPABASE_SECRET_KEY) return { ok: false, error: "not_configured" };
 
   const { createAdminClient } = await import("@/lib/supabase/admin");
-  const { STOP_USD, costOf, spentThisMonth } = await import("@/lib/ai/budget");
+  const { guardedAiCall } = await import("@/lib/ai/guard");
   const { estimateWorkout } = await import("@/lib/ai/workout");
-  const { checkCostAlerts } = await import("@/lib/ai/alerts");
-  const admin = createAdminClient();
-  if ((await spentThisMonth(admin)) >= STOP_USD) return { ok: false, error: "ai_paused" };
-
-  try {
-    const call = await estimateWorkout({ ...parsed.data, weightKg: await latestWeight(supabase, profile.id), language: profile.language });
-    await admin.from("ai_usage").insert({
-      user_id: profile.id, model: call.model, purpose: "workout",
-      tokens_in: call.tokensIn, tokens_out: call.tokensOut, cost_usd: costOf(call.model, call.tokensIn, call.tokensOut),
-    });
-    await checkCostAlerts(admin, await spentThisMonth(admin));
-    return { ok: true, ...call.estimate };
-  } catch (e) {
-    console.error("workout estimate failed", e);
-    return { ok: false, error: "failed" };
-  }
+  const weightKg = await latestWeight(supabase, profile.id);
+  const res = await guardedAiCall(createAdminClient(), profile.id, "workout", () =>
+    estimateWorkout({ ...parsed.data, weightKg, language: profile.language }),
+  );
+  return res.ok ? { ok: true, ...res.call.estimate } : { ok: false, error: res.error };
 }
 
 const itemSchema = z.object({
@@ -305,7 +294,7 @@ export async function logMeal(input: z.input<typeof mealSchema>): Promise<Action
   }
 
   const outside = profile.method === "if" && !insideWindow(localTime(eatenAt, profile.timezone), profile.method_config ?? {});
-  const { error } = await supabase.from("meals").insert({
+  const row = {
     id: mealId,
     user_id: profile.id,
     eaten_at: eatenAt.toISOString(),
@@ -318,8 +307,11 @@ export async function logMeal(input: z.input<typeof mealSchema>): Promise<Action
     ai_draft: v.ai_draft ?? null,
     photo_path: photoPath,
     outside_window: outside,
-    ...(v.recipe_id ? { recipe_id: v.recipe_id } : {}),
-  });
+  };
+  const withRecipe: Record<string, unknown> = v.recipe_id ? { ...row, recipe_id: v.recipe_id } : row;
+  let { error } = await supabase.from("meals").insert(withRecipe);
+  // The recipe was deleted meanwhile (foreign key): keep the meal, just without the link.
+  if (error?.code === "23503" && v.recipe_id) ({ error } = await supabase.from("meals").insert(row));
   if (error) return fail(error.message);
 
   if (items.length) {
@@ -358,7 +350,7 @@ const estimateSchema = z.object({
 
 export type EstimateResponse =
   | { ok: true; estimate: import("@/lib/ai/estimate").Estimate; products: import("@/lib/ai/off").Product[] }
-  | { ok: false; error: "ai_paused" | "not_configured" | "invalid" | "failed" };
+  | { ok: false; error: "ai_paused" | "busy" | "not_configured" | "invalid" | "recipe_gone" | "failed" };
 
 /** Photo and/or text in, an editable estimate (and maybe follow-up questions) out. */
 export async function estimateMealAction(input: z.input<typeof estimateSchema>): Promise<EstimateResponse> {
@@ -371,13 +363,9 @@ export async function estimateMealAction(input: z.input<typeof estimateSchema>):
   if (!process.env.ANTHROPIC_API_KEY || !process.env.SUPABASE_SECRET_KEY) return { ok: false, error: "not_configured" };
 
   const { createAdminClient } = await import("@/lib/supabase/admin");
-  const { STOP_USD, costOf, spentThisMonth } = await import("@/lib/ai/budget");
+  const { guardedAiCall } = await import("@/lib/ai/guard");
   const { estimateMeal } = await import("@/lib/ai/estimate");
   const { lookupBarcode } = await import("@/lib/ai/off");
-  const { checkCostAlerts } = await import("@/lib/ai/alerts");
-  const admin = createAdminClient();
-
-  if ((await spentThisMonth(admin)) >= STOP_USD) return { ok: false, error: "ai_paused" };
 
   const products = (await Promise.all([...new Set(v.barcodes)].map(lookupBarcode))).filter((p) => p != null);
 
@@ -388,7 +376,7 @@ export async function estimateMealAction(input: z.input<typeof estimateSchema>):
       .select("name, portions, total_kcal, total_protein_g, cooked_weight_g, items")
       .eq("id", v.recipe_id)
       .maybeSingle();
-    if (!data) return { ok: false, error: "invalid" };
+    if (!data) return { ok: false, error: "recipe_gone" };
     recipe = {
       name: data.name as string,
       portions: Number(data.portions),
@@ -399,8 +387,9 @@ export async function estimateMealAction(input: z.input<typeof estimateSchema>):
     };
   }
 
-  try {
-    const call = await estimateMeal({
+  const purpose = recipe ? "meal_recipe" : v.photo ? "meal_photo" : "meal_text";
+  const res = await guardedAiCall(createAdminClient(), profile.id, purpose, () =>
+    estimateMeal({
       recipe,
       photo: v.photo,
       text: v.text,
@@ -410,28 +399,16 @@ export async function estimateMealAction(input: z.input<typeof estimateSchema>):
       language: profile.language,
       method: profile.method,
       focus: profile.food_focus,
-    });
-    await admin.from("ai_usage").insert({
-      user_id: profile.id,
-      model: call.model,
-      purpose: recipe ? "meal_recipe" : v.photo ? "meal_photo" : "meal_text",
-      tokens_in: call.tokensIn,
-      tokens_out: call.tokensOut,
-      cost_usd: costOf(call.model, call.tokensIn, call.tokensOut),
-    });
-    await checkCostAlerts(admin, await spentThisMonth(admin));
-    return { ok: true, estimate: call.estimate, products };
-  } catch (e) {
-    console.error("estimate failed", e);
-    return { ok: false, error: (e as Error).message === "NO_API_KEY" ? "not_configured" : "failed" };
-  }
+    }),
+  );
+  return res.ok ? { ok: true, estimate: res.call.estimate, products } : { ok: false, error: res.error };
 }
 
 // ───────────────────────── Recipe calculator ─────────────────────────
 
 export type RecipeResponse =
   | { ok: true; estimate: import("@/lib/ai/recipe").RecipeEstimate }
-  | { ok: false; error: "ai_paused" | "not_configured" | "invalid" | "failed" };
+  | { ok: false; error: "ai_paused" | "busy" | "not_configured" | "invalid" | "failed" };
 
 /** Ingredients + how it was cooked in, kcal for the whole dish out. Nothing is saved except the AI cost. */
 export async function estimateRecipeAction(input: { text: string }): Promise<RecipeResponse> {
@@ -441,29 +418,10 @@ export async function estimateRecipeAction(input: { text: string }): Promise<Rec
   if (!process.env.ANTHROPIC_API_KEY || !process.env.SUPABASE_SECRET_KEY) return { ok: false, error: "not_configured" };
 
   const { createAdminClient } = await import("@/lib/supabase/admin");
-  const { STOP_USD, costOf, spentThisMonth } = await import("@/lib/ai/budget");
+  const { guardedAiCall } = await import("@/lib/ai/guard");
   const { estimateRecipe } = await import("@/lib/ai/recipe");
-  const { checkCostAlerts } = await import("@/lib/ai/alerts");
-  const admin = createAdminClient();
-
-  if ((await spentThisMonth(admin)) >= STOP_USD) return { ok: false, error: "ai_paused" };
-
-  try {
-    const call = await estimateRecipe({ text: parsed.data.text, language: profile.language });
-    await admin.from("ai_usage").insert({
-      user_id: profile.id,
-      model: call.model,
-      purpose: "recipe",
-      tokens_in: call.tokensIn,
-      tokens_out: call.tokensOut,
-      cost_usd: costOf(call.model, call.tokensIn, call.tokensOut),
-    });
-    await checkCostAlerts(admin, await spentThisMonth(admin));
-    return { ok: true, estimate: call.estimate };
-  } catch (e) {
-    console.error("recipe estimate failed", e);
-    return { ok: false, error: (e as Error).message === "NO_API_KEY" ? "not_configured" : "failed" };
-  }
+  const res = await guardedAiCall(createAdminClient(), profile.id, "recipe", () => estimateRecipe({ text: parsed.data.text, language: profile.language }));
+  return res.ok ? { ok: true, estimate: res.call.estimate } : { ok: false, error: res.error };
 }
 
 const recipeItemSchema = z.object({
@@ -801,8 +759,12 @@ export async function sendTestReportAction(): Promise<{ ok: true; to: string } |
   const { profile } = await requireOnboardedUserForAction();
   const { createAdminClient } = await import("@/lib/supabase/admin");
   const { sendTestReports } = await import("@/lib/reports/run");
+  const { RATE_LIMIT, recentCalls } = await import("@/lib/ai/guard");
   try {
-    return await sendTestReports(createAdminClient(), profile, new Date());
+    const admin = createAdminClient();
+    // Each test makes two AI calls and two emails: share the per-person AI limit.
+    if ((await recentCalls(admin, profile.id)) >= RATE_LIMIT) return { ok: false, error: "busy" };
+    return await sendTestReports(admin, profile, new Date());
   } catch (e) {
     console.error("test report failed", e);
     return { ok: false, error: e instanceof Error ? e.message.slice(0, 300) : "failed" };

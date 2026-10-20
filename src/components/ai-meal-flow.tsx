@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { estimateMealAction, logMeal, type EstimateResponse } from "@/app/actions";
 import type { Estimate } from "@/lib/ai/estimate";
 import { preparePhoto, type PreparedPhoto } from "@/lib/client/photo";
@@ -80,6 +80,14 @@ export function AiMealFlow({
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
+  // Free the previous photo preview whenever the photo changes or the screen closes.
+  useEffect(() => {
+    const url = photo?.previewUrl;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [photo]);
+
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     setPreparing(true);
@@ -94,7 +102,19 @@ export function AiMealFlow({
   };
 
   const errorText = (r: Extract<EstimateResponse, { ok: false }>) =>
-    r.error === "ai_paused" ? ai.paused : r.error === "not_configured" ? ai.notConfigured : r.error === "invalid" ? (recipe ? ai.needRecipeInput : ai.needInput) : ai.failed;
+    r.error === "ai_paused"
+      ? ai.paused
+      : r.error === "busy"
+        ? ai.busy
+        : r.error === "recipe_gone"
+          ? ai.recipeGone
+          : r.error === "not_configured"
+            ? ai.notConfigured
+            : r.error === "invalid"
+              ? recipe
+                ? ai.needRecipeInput
+                : ai.needInput
+              : ai.failed;
 
   const runEstimate = (nextRound: number, allAnswers: { question: string; answer: string }[]) => {
     const id = ++attempt.current;
@@ -121,6 +141,10 @@ export function AiMealFlow({
       if (!r.ok) {
         setNotice({ tone: "warn", text: errorText(r) });
         if (r.error === "ai_paused" || r.error === "not_configured") setStage("manual");
+        if (r.error === "recipe_gone") {
+          setRecipeId(null);
+          setStage("input");
+        }
         return;
       }
       if (r.estimate.items.length === 0) {
@@ -176,14 +200,21 @@ export function AiMealFlow({
     });
 
   const reset = () => {
+    attempt.current++; // ignore any answer still on its way
     setStage("input");
     setPhoto(null);
     setText("");
     setEstimate(null);
     setAnswers([]);
+    setPick({});
     setItems([]);
+    setDescription("");
     setRound(1);
     setNotice(null);
+    setRetry(null);
+    setMode("own");
+    setRecipeId(null);
+    setWhen({ when: "now", customDate: today, customTime: "" });
   };
 
   const update = (key: string, patch: Partial<DraftItem>) => setItems((cur) => cur.map((i) => (i.key === key ? { ...i, ...patch } : i)));
@@ -252,8 +283,14 @@ export function AiMealFlow({
 
           {(mode === "own" || recipe) && (
           <>
-          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
-          <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => {
+              onFile(e.target.files?.[0]);
+              e.target.value = ""; // so picking the same picture again still fires
+            }} />
+          <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
+              onFile(e.target.files?.[0]);
+              e.target.value = ""; // so picking the same picture again still fires
+            }} />
 
           {photo ? (
             <div className="space-y-2">

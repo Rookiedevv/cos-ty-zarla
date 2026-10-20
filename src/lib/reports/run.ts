@@ -24,9 +24,11 @@ interface ReportRow<D> {
   data: D;
 }
 
-/** A saved report whose AI comment failed for a passing reason and still has tries left: it waits, unsent. */
-export const waitingForAi = (r: ReportRow<AiStatus>) =>
-  !r.ai && !r.emailed_at && r.data?.aiFailure === "error" && (r.data.aiTries ?? 0) < AI_RUNS;
+/**
+ * A saved report still without its comment and not yet sent: a passing failure, or a run that was cut off
+ * mid-try. The next run tries again or, once the tries are used up, sends it without the comment.
+ */
+export const waitingForAi = (r: ReportRow<AiStatus>) => !r.ai && !r.emailed_at && r.data?.aiFailure === "error" && !r.data.aiFinal;
 
 /**
  * One cron run's try at the AI comment. Saves the comment, or the reason it failed.
@@ -38,19 +40,31 @@ export async function tryComment<D extends AiStatus, A>(
   data: D,
   comment: () => Promise<{ ok: true; value: A } | { ok: false; reason: NonNullable<AiStatus["aiFailure"]> }>,
 ): Promise<{ data: D; ai: A | null } | null> {
+  const save = (d: D, extra: Record<string, unknown> = {}) => admin.from("reports").update({ data: d, ...extra }).eq("id", rowId);
+  const giveUp = async (d: D) => {
+    const final = { ...d, aiFinal: true };
+    await save(final);
+    return { data: final, ai: null };
+  };
+
+  const done = data.aiTries ?? 0;
+  if (done >= AI_RUNS) return giveUp(data); // the last try was cut off: send without the comment now
+
   // Count the try before making it: if this run is cut off mid-call, the next run picks the report up again.
-  const tries = (data.aiTries ?? 0) + 1;
-  await admin.from("reports").update({ data: { ...data, aiFailure: "error", aiTries: tries } }).eq("id", rowId);
+  const tries = done + 1;
+  await save({ ...data, aiFailure: "error", aiTries: tries });
   const res = await comment();
   if (res.ok) {
-    const { aiFailure: _f, aiTries: _t, ...clean } = data; // eslint-disable-line @typescript-eslint/no-unused-vars
-    await admin.from("reports").update({ ai: res.value, data: clean }).eq("id", rowId);
+    const { aiFailure: _f, aiTries: _t, aiFinal: _x, ...clean } = data; // eslint-disable-line @typescript-eslint/no-unused-vars
+    await save(clean as D, { ai: res.value });
     return { data: clean as D, ai: res.value };
   }
   const next = { ...data, aiFailure: res.reason, aiTries: tries };
-  await admin.from("reports").update({ data: next }).eq("id", rowId);
-  if (res.reason === "error" && next.aiTries < AI_RUNS) return null;
-  return { data: next, ai: null };
+  if (res.reason === "error" && tries < AI_RUNS) {
+    await save(next);
+    return null;
+  }
+  return giveUp(next);
 }
 
 /** Everything a daily report shows for one day. */
@@ -229,16 +243,15 @@ async function finishWeekly(admin: SupabaseClient, profile: Profile, rowId: stri
 
 /** Both report jobs for one person; never throws. */
 export async function runReports(admin: SupabaseClient, profile: Profile, now: Date): Promise<string[]> {
-  const out: string[] = [];
-  for (const job of [runDailyReport, runWeeklyReport]) {
-    try {
-      out.push(await job(admin, profile, now));
-    } catch (e) {
-      console.error("report failed", job.name, profile.id, e);
-      out.push("error");
-    }
-  }
-  return out;
+  // Side by side, so a slow AI answer for one doesn't push the other past the cron's time limit.
+  return Promise.all(
+    [runDailyReport, runWeeklyReport].map((job) =>
+      job(admin, profile, now).catch((e) => {
+        console.error("report failed", job.name, profile.id, e);
+        return "error";
+      }),
+    ),
+  );
 }
 
 /**

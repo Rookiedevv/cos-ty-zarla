@@ -90,14 +90,14 @@ async function callJson<T>(
   if (!apiKey) return { ok: false, reason: "no_key" };
   const model = process.env.AI_MODEL || "claude-haiku-5-5";
   // The cron run has 60 s for everyone; this loop retries itself, so no hidden SDK retries.
-  const client = new Anthropic({ apiKey, timeout: 20_000, maxRetries: 0 });
+  const client = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 0 });
   const started = Date.now();
   let room = maxTokens;
   let refusals = 0;
 
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     if (attempt > 1) {
-      if (Date.now() - started > 30_000) break; // leave the rest to the next cron run
+      if (Date.now() - started > 20_000) break; // leave the rest to the next cron run
       await pause(pauseMs(attempt));
     }
     try {

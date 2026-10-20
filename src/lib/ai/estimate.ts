@@ -1,6 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { FoodFocus, Method } from "../engine/types";
+import { parseAnswer } from "./guard";
 import type { Product } from "./off";
 
 export interface EstimateItem {
@@ -185,11 +186,18 @@ export async function estimateMeal(input: EstimateInput): Promise<EstimateCall> 
     output_config: { format: { type: "json_schema", schema: SCHEMA as unknown as Record<string, unknown> } },
   });
 
-  if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") throw new Error(`INCOMPLETE_${response.stop_reason}`);
-  const text = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
-  if (!text) throw new Error("NO_OUTPUT");
-  const estimate = sanitize(JSON.parse(text) as Estimate, input.round >= MAX_ROUNDS);
-  return { estimate, model, tokensIn: response.usage.input_tokens, tokensOut: response.usage.output_tokens };
+  const { value, usage } = parseAnswer<Estimate>(response, model);
+  return { estimate: sanitize(value, input.round >= MAX_ROUNDS), ...usage };
+}
+
+/** Question ids key the answers on screen, so they must be unique and non-empty. */
+function uniqueIds(qs: EstimateQuestion[]): EstimateQuestion[] {
+  const seen = new Set<string>();
+  return qs.map((q, n) => {
+    const id = q.id && !seen.has(q.id) ? q.id : `q${n + 1}`;
+    seen.add(id);
+    return { ...q, id };
+  });
 }
 
 /** Clamp anything out of range; the API guarantees shape, not sensible numbers. */
@@ -208,11 +216,13 @@ export function sanitize(e: Estimate, lastRound: boolean): Estimate {
     })),
     questions: lastRound
       ? []
-      : (e.questions ?? []).slice(0, 3).map((q, n) => ({
-          id: String(q.id || `q${n + 1}`).slice(0, 20),
-          text: String(q.text ?? "").slice(0, 200),
-          options: (q.options ?? []).slice(0, 4).map((o) => String(o).slice(0, 60)),
-        })),
+      : uniqueIds(
+          (e.questions ?? []).slice(0, 3).map((q) => ({
+            id: String(q.id ?? "").slice(0, 20),
+            text: String(q.text ?? "").slice(0, 200),
+            options: [...new Set((q.options ?? []).map((o) => String(o).slice(0, 60)).filter(Boolean))].slice(0, 4),
+          })),
+        ),
     fits_diet: e.fits_diet === "no" || e.fits_diet === "partly" ? e.fits_diet : "yes",
     verdict: String(e.verdict ?? "").slice(0, 300),
   };

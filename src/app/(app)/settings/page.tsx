@@ -16,6 +16,7 @@ import { emailConfigured } from "@/lib/email";
 import { displayName } from "@/lib/reports/run";
 import { requireOnboardedUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { usageRowsSince } from "@/lib/ai/budget";
 
 // Room for the test-report button: two AI calls and two emails.
 export const maxDuration = 60;
@@ -133,7 +134,7 @@ async function AccountTab({ supabase, profile }: Ctx) {
   const none = Promise.resolve({ data: null });
   const [{ data: deviceRows }, { data: usage }, { data: allowed }] = await Promise.all([
     supabase.from("device_tokens").select("id, label, created_at, last_sync_at").eq("user_id", profile.id).order("created_at"),
-    profile.is_admin ? supabase.from("ai_usage").select("user_id, cost_usd").gte("at", monthStart) : none,
+    profile.is_admin ? usageRowsSince(supabase, monthStart).then((data) => ({ data }), () => ({ data: null })) : none,
     profile.is_admin ? supabase.from("allowed_emails").select("email").order("added_at") : none,
   ]);
   const devices = (deviceRows ?? []) as Device[];

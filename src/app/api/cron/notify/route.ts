@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { loadDay } from "@/lib/day";
 import { localDate, localTime } from "@/lib/engine/dates";
@@ -14,9 +15,16 @@ export const maxDuration = 60;
  * Called every 5 minutes by Supabase (pg_cron). Works out which reminders are
  * due for each person and sends them to every device they enabled.
  */
+/** Constant-time check of the Bearer secret (hashing first makes both sides the same length). */
+function authorized(header: string | null, secret: string | undefined): boolean {
+  if (!secret || !header) return false;
+  const a = createHash("sha256").update(header).digest();
+  const b = createHash("sha256").update(`Bearer ${secret}`).digest();
+  return timingSafeEqual(a, b);
+}
+
 export async function POST(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!authorized(request.headers.get("authorization"), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -88,12 +96,14 @@ async function removeOldPhotos(admin: ReturnType<typeof createAdminClient>, now:
   const cutoff = new Date(now.getTime() - 90 * 24 * 3600 * 1000).toISOString();
   const { data: old } = await admin
     .from("meals")
-    .select("id, photo_path")
+    .select("id, user_id, photo_path")
     .not("photo_path", "is", null)
     .lt("logged_at", cutoff)
     .limit(50);
   if (!old?.length) return 0;
-  const { error } = await admin.storage.from("meal-photos").remove(old.map((m) => m.photo_path as string));
+  // Only ever delete a file inside the meal owner's own folder, whatever the row says.
+  const paths = old.map((m) => m.photo_path as string).filter((p, i) => p.startsWith(`${old[i].user_id}/`) && !p.includes(".."));
+  const { error } = paths.length ? await admin.storage.from("meal-photos").remove(paths) : { error: null };
   if (error) {
     console.error("photo cleanup failed", error.message);
     return 0;

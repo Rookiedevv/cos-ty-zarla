@@ -192,3 +192,14 @@ Optional: `EMAIL_FROM_NAME` (default "Coś ty żarła").
 ## 3. Check
 Settings → Dieta → **Raporty e-mail** no longer shows "not set up". The first daily report arrives the morning after a day with entries;
 the weekly one right after the weigh-in on your weigh-in day (or at 21:00 without it). All reports also appear in Historia → Raporty.
+
+# Recipes (Przepis tab)
+
+One-time: Supabase → **SQL Editor → New query** → run `supabase/migrations/20261015000008_recipes.sql`
+(saved recipes, hiding other people's recipes, and the link from a meal to its recipe).
+Nothing to set in Vercel: the recipe calculator uses the same `ANTHROPIC_API_KEY` as meal logging.
+
+# Server region
+
+`vercel.json` pins the app's server code to Frankfurt (`fra1`), next to the Supabase database (Central EU).
+If the database ever moves, change the region there to match; a far-away region makes every screen slow.

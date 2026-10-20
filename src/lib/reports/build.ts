@@ -17,7 +17,7 @@ export const AI_RUNS = 3;
 
 /** The reason to show for a missing comment: "pending" while more tries are coming. */
 export const aiMissingReason = (d: AiStatus): string | undefined =>
-  d.aiFailure === "error" && (d.aiTries ?? 0) < AI_RUNS ? "pending" : d.aiFailure;
+  d.aiFailure === "error" && !d.aiFinal && (d.aiTries ?? 0) < AI_RUNS ? "pending" : d.aiFailure;
 
 /** Kept in a report's data while its AI comment is missing. */
 export interface AiStatus {
@@ -25,6 +25,8 @@ export interface AiStatus {
   aiFailure?: AiFailure;
   /** Cron runs that tried so far. */
   aiTries?: number;
+  /** No more tries: the report was (or is being) sent without the comment. */
+  aiFinal?: boolean;
 }
 
 export interface DailyData extends AiStatus {
