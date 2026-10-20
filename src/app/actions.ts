@@ -239,6 +239,8 @@ const photoSchema = z.object({
 });
 
 const mealSchema = z.object({
+  /** Made on the phone once per meal, so a retry after a dropped connection can't save it twice. */
+  id: z.uuid().optional(),
   description: z.string().trim().min(1).max(2000),
   /** Manual entry: one total. AI entry: the confirmed items, and the total is their sum. */
   total_kcal: z.coerce.number().int().min(0).max(10000).optional(),
@@ -279,7 +281,7 @@ export async function logMeal(input: z.input<typeof mealSchema>): Promise<Action
     eatenAt = new Date(now.getTime() - WHEN_MINUTES[v.when] * 60000);
   }
 
-  const mealId = crypto.randomUUID();
+  const mealId = v.id ?? crypto.randomUUID();
   let photoPath: string | null = null;
   if (v.photo) {
     const ext = v.photo.mediaType.split("/")[1].replace("jpeg", "jpg");
@@ -312,6 +314,12 @@ export async function logMeal(input: z.input<typeof mealSchema>): Promise<Action
   let { error } = await supabase.from("meals").insert(withRecipe);
   // The recipe was deleted meanwhile (foreign key): keep the meal, just without the link.
   if (error?.code === "23503" && v.recipe_id) ({ error } = await supabase.from("meals").insert(row));
+  // Same id already there: the first try did save, only its answer got lost on the way back.
+  if (error?.code === "23505") {
+    revalidatePath("/");
+    revalidatePath("/history");
+    return { ok: true };
+  }
   if (error) return fail(error.message);
 
   if (items.length) {

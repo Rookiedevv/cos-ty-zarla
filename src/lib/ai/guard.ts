@@ -54,7 +54,8 @@ export async function guardedAiCall<T extends AiUsage>(
       tokens_out: u.tokensOut,
       cost_usd: costOf(u.model, u.tokensIn, u.tokensOut),
     });
-    await checkCostAlerts(admin, await spentThisMonth(admin));
+    // An alert problem must never throw away an answer that was already paid for.
+    await checkCostAlerts(admin, await spentThisMonth(admin)).catch((e) => console.error("cost alert check failed", e));
   };
 
   try {

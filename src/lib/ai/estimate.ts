@@ -193,8 +193,13 @@ export async function estimateMeal(input: EstimateInput): Promise<EstimateCall> 
 /** Question ids key the answers on screen, so they must be unique and non-empty. */
 function uniqueIds(qs: EstimateQuestion[]): EstimateQuestion[] {
   const seen = new Set<string>();
-  return qs.map((q, n) => {
-    const id = q.id && !seen.has(q.id) ? q.id : `q${n + 1}`;
+  let next = 1;
+  return qs.map((q) => {
+    let id = q.id;
+    if (!id || seen.has(id)) {
+      while (seen.has(`q${next}`)) next++;
+      id = `q${next}`;
+    }
     seen.add(id);
     return { ...q, id };
   });

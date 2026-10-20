@@ -117,7 +117,10 @@ async function callJson<T>(
         tokens_out: response.usage.output_tokens,
         cost_usd: costOf(model, response.usage.input_tokens, response.usage.output_tokens),
       });
-      await checkCostAlerts(admin, await spentThisMonth(admin));
+      // An alert problem must never throw away an answer that was already paid for.
+      await Promise.resolve()
+        .then(async () => checkCostAlerts(admin, await spentThisMonth(admin)))
+        .catch((e) => console.error("cost alert check failed", e));
       if (response.stop_reason === "refusal") {
         refusals++;
         console.error(`${purpose} AI refused (attempt ${attempt})`);

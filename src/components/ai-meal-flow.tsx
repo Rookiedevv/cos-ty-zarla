@@ -59,8 +59,13 @@ export function AiMealFlow({
   const [photo, setPhoto] = useState<PreparedPhoto | null>(null);
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"own" | "recipe">("own");
+  // One id per meal being logged: retrying a save can never create a second copy. New meal → new id.
+  const [mealId, setMealId] = useState(() => crypto.randomUUID());
+  // Recipes found to be deleted while this screen was open.
+  const [gone, setGone] = useState<Set<string>>(() => new Set());
+  const pickable = recipes.filter((r) => !gone.has(r.id));
   const [recipeId, setRecipeId] = useState<string | null>(null);
-  const recipe = mode === "recipe" ? (recipes.find((r) => r.id === recipeId) ?? null) : null;
+  const recipe = mode === "recipe" ? (pickable.find((r) => r.id === recipeId) ?? null) : null;
   const refGrams = recipe ? gramsPerPortion(recipe) : null;
   const [round, setRound] = useState(1);
   const [estimate, setEstimate] = useState<Estimate | null>(initial?.estimate ?? null);
@@ -80,20 +85,26 @@ export function AiMealFlow({
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
-  // Free the previous photo preview whenever the photo changes or the screen closes.
-  useEffect(() => {
-    const url = photo?.previewUrl;
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [photo]);
+  // Photo previews are freed when replaced or removed (changePhoto) and when leaving the screen.
+  const previewRef = useRef<string | null>(null);
+  const changePhoto = (next: PreparedPhoto | null) => {
+    if (previewRef.current && previewRef.current !== next?.previewUrl) URL.revokeObjectURL(previewRef.current);
+    previewRef.current = next?.previewUrl ?? null;
+    setPhoto(next);
+  };
+  useEffect(
+    () => () => {
+      if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    },
+    [],
+  );
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     setPreparing(true);
     setNotice(null);
     try {
-      setPhoto(await preparePhoto(file));
+      changePhoto(await preparePhoto(file));
     } catch {
       setNotice({ tone: "warn", text: ai.failed });
     } finally {
@@ -142,8 +153,10 @@ export function AiMealFlow({
         setNotice({ tone: "warn", text: errorText(r) });
         if (r.error === "ai_paused" || r.error === "not_configured") setStage("manual");
         if (r.error === "recipe_gone") {
+          if (recipeId) setGone((g) => new Set(g).add(recipeId));
           setRecipeId(null);
           setStage("input");
+          router.refresh();
         }
         return;
       }
@@ -178,6 +191,7 @@ export function AiMealFlow({
     start(async () => {
       setNotice(null);
       const r = await withTimeout(logMeal({
+        id: mealId,
         description: description.trim(),
         items: items.map((i) => ({
           name: i.name.trim(),
@@ -202,7 +216,7 @@ export function AiMealFlow({
   const reset = () => {
     attempt.current++; // ignore any answer still on its way
     setStage("input");
-    setPhoto(null);
+    changePhoto(null);
     setText("");
     setEstimate(null);
     setAnswers([]);
@@ -214,6 +228,7 @@ export function AiMealFlow({
     setRetry(null);
     setMode("own");
     setRecipeId(null);
+    setMealId(crypto.randomUUID());
     setWhen({ when: "now", customDate: today, customTime: "" });
   };
 
@@ -246,13 +261,13 @@ export function AiMealFlow({
             ))}
           </div>
 
-          {mode === "recipe" && !recipes.length && <p className="text-ink-soft">{ai.noRecipes}</p>}
+          {mode === "recipe" && !pickable.length && <p className="text-ink-soft">{ai.noRecipes}</p>}
 
-          {mode === "recipe" && recipes.length > 0 && !recipe && (
+          {mode === "recipe" && pickable.length > 0 && !recipe && (
             <fieldset>
               <legend className="mb-2 font-semibold">{ai.pickRecipe}</legend>
               <ul className="space-y-2">
-                {recipes.map((r) => (
+                {pickable.map((r) => (
                   <li key={r.id}>
                     <button
                       type="button"
@@ -299,7 +314,7 @@ export function AiMealFlow({
               {photo.barcodes.map((b) => (
                 <p key={b} className="text-sm font-semibold text-accent">{ai.barcodeFound(b)}</p>
               ))}
-              <Button variant="quiet" onClick={() => setPhoto(null)}>{ai.removePhoto}</Button>
+              <Button variant="quiet" onClick={() => changePhoto(null)}>{ai.removePhoto}</Button>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-[2fr_1fr]">

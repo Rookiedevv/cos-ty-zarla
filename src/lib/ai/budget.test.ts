@@ -68,5 +68,14 @@ describe("follow-up questions", () => {
     expect(s.questions.map((q) => q.id)).toEqual(["q1", "q2", "q3"]);
     expect(s.questions[0].options).toEqual(["1", "2"]);
   });
+
+  it("doesn't reuse an id the model already took", () => {
+    const s = sanitize(
+      { description: "x", items: [], questions: [{ id: "q2", text: "A", options: [] }, { id: "q2", text: "B", options: [] }, { id: "q1", text: "C", options: [] }], fits_diet: "yes", verdict: "" },
+      false,
+    );
+    const ids = s.questions.map((q) => q.id);
+    expect(new Set(ids).size).toBe(3);
+  });
 });
 

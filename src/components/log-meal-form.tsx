@@ -17,6 +17,8 @@ export function LogMealForm({ today, showProtein, initialDescription = "" }: { t
   const [protein, setProtein] = useState("");
   const [when, setWhen] = useState<WhenValue>({ when: "now", customDate: today, customTime: "" });
   const [error, setError] = useState<string | null>(null);
+  // One id per meal on this screen: retrying a save can never create a second copy.
+  const [mealId] = useState(() => crypto.randomUUID());
   const [pending, start] = useTransition();
 
   const valid = description.trim() && kcal !== "" && Number(kcal) >= 0 && whenReady(when);
@@ -53,7 +55,7 @@ export function LogMealForm({ today, showProtein, initialDescription = "" }: { t
         onClick={() =>
           start(async () => {
             setError(null);
-            const r = await withTimeout(logMeal({ description, total_kcal: Number(kcal), protein_g: protein.replace(",", "."), source: "manual", ...whenPayload(when) }));
+            const r = await withTimeout(logMeal({ id: mealId, description, total_kcal: Number(kcal), protein_g: protein.replace(",", "."), source: "manual", ...whenPayload(when) }));
             if (r !== "timeout" && r.ok) router.push("/");
             else setError(t.wait.saveFailed);
           })
