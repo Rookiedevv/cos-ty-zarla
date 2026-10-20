@@ -80,4 +80,5 @@ RLS tests in `supabase/tests/*.sql` run on a plain local Postgres with `stub_sup
 
 ## Checks before pushing
 `npx tsc --noEmit -p . && npx eslint src && npx vitest run && npx next build`. Don't run prettier (not used in this repo).
+**Code review on every new feature (standing instruction, 2026-10-20):** after the checks pass and before asking to push, review the change with a code review skill if one is installed; otherwise with a separate review agent that hasn't seen the work (correctness, security/RLS, AI cost, mobile UX). Fix what it finds, rerun the checks, and tell the user in one line what the review caught.
 Push to `main`. Vercel deploys automatically; check with `gh api repos/Rookiedevv/cos-ty-zarla/commits/<sha>/statuses`.
